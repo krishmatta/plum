@@ -11,9 +11,7 @@ M = TypeVar("M", bound=BaseModel)
 
 
 class TorchListCodec(Generic[M]):
-    """Reads via ``torch.load(weights_only=False)``, which unpickles arbitrary
-    objects and can execute code. Only read files you (or your pipeline) wrote.
-    """
+    """Codec[list[M]]. Reading unpickles (weights_only=False) and can execute code; only read trusted files."""
 
     extension = ".pth"
 

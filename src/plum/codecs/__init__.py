@@ -15,12 +15,8 @@ V = TypeVar("V")
 
 @runtime_checkable
 class Codec(Protocol[V]):
-    """How one in-memory value becomes one file, and back.
-
-    V is the file's whole value: Codec[Point] reads/writes a single model,
-    Codec[list[Record]] reads/writes a dataset. Any object with a matching
-    shape conforms; no subclassing required.
-    """
+    """How one in-memory value becomes one file, and back. V is the file's whole
+    value: Codec[Point] is a single-model file, Codec[list[Record]] a dataset."""
 
     extension: str
 
