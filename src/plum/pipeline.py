@@ -134,6 +134,8 @@ class Pipeline(abc.ABC):
         if not run_id:
             raise ValueError("run_id is required")
         p = self.Params(**params)
+        # An undeclared `produces` must fail here, not hours later at ctx.output().
+        self.store.catalog.get(self.produces)
         scope = self.scope(p)
         run_dir = self.store.run_dir(self.produces, scope, run_id)
 

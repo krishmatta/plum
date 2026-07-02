@@ -11,6 +11,7 @@ from plum import (
     Pipeline,
     PriorRunFailed,
     Store,
+    UnknownArtifact,
     load_manifest,
 )
 
@@ -231,3 +232,22 @@ def test_list_runs(tmp_path):
     pipe.run("r1")
     pipe.run("r2")
     assert pipe.list_runs(None) == ["r1", "r2"]
+
+
+class Undeclared(Pipeline):
+    name = "undeclared"
+    produces = "unregistered"
+
+    class Params(Pipeline.Params):
+        pass
+
+    def _run(self, ctx):
+        pass
+
+
+def test_undeclared_produces_fails_before_touching_disk(tmp_path):
+    store = build_store(tmp_path)
+    pipe = Undeclared(store)
+    with pytest.raises(UnknownArtifact):
+        pipe.run("r1")
+    assert list(tmp_path.iterdir()) == []
