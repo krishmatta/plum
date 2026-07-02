@@ -2,7 +2,9 @@ from typer.testing import CliRunner
 
 from plum import Pipeline, Registry, Store, build_cli, load_manifest
 
-from tests.example.app import CATALOG, Numbers, app
+from tests.example.app import app
+from tests.example.catalog import CATALOG
+from tests.example.schema import Numbers, Power
 
 runner = CliRunner()
 
@@ -18,12 +20,13 @@ def test_run_load_writes_artifact(tmp_path):
     assert store.read("numbers", None, "r1") == Numbers(values=[0, 1, 2])
 
 
-def test_run_square_consumes_upstream(tmp_path):
-    run("run", "load", "nums", "n=4", data_root=tmp_path)
-    result = run("run", "square", "sq", "numbers_run=nums", data_root=tmp_path)
+def test_run_apply_consumes_upstream_scoped_by_method(tmp_path):
+    run("run", "load", "nums", "n=6", data_root=tmp_path)
+    result = run("run", "apply", "p1", "numbers_run=nums", "method=cube", data_root=tmp_path)
     assert result.exit_code == 0, result.output
     store = Store(CATALOG, tmp_path)
-    assert store.read("squares", None, "sq") == Numbers(values=[0, 1, 4, 9])
+    assert store.read("powers", "cube", "p1") == [Power(x=x, y=x**3) for x in range(6)]
+    assert (tmp_path / "powers" / "cube" / "p1" / "powers.jsonl").exists()
 
 
 def test_rerun_load_skips(tmp_path):
@@ -37,7 +40,7 @@ def test_rerun_load_skips(tmp_path):
 def test_unknown_pipeline_lists_known(tmp_path):
     result = run("run", "nope", "r1", data_root=tmp_path)
     assert result.exit_code == 1
-    assert "load" in result.output and "square" in result.output
+    assert "load" in result.output and "apply" in result.output
 
 
 def test_bad_param_exits_nonzero(tmp_path):
@@ -49,21 +52,29 @@ def test_pipelines_list():
     result = runner.invoke(app, ["pipelines", "list"])
     assert result.exit_code == 0
     assert "load" in result.output
-    assert "square" in result.output
+    assert "apply" in result.output
 
 
-def test_pipelines_params_square():
-    result = runner.invoke(app, ["pipelines", "params", "square"])
+def test_pipelines_params_apply():
+    result = runner.invoke(app, ["pipelines", "params", "apply"])
     assert result.exit_code == 0
     assert "numbers_run: str (required)" in result.output
+    assert "method: str = 'square'" in result.output
 
 
-def test_runs_lists_run_ids(tmp_path):
-    run("run", "load", "a", data_root=tmp_path)
-    run("run", "load", "b", data_root=tmp_path)
-    result = run("runs", "load", data_root=tmp_path)
+def test_runs_lists_run_ids_in_scope(tmp_path):
+    run("run", "load", "nums", data_root=tmp_path)
+    run("run", "apply", "a", "numbers_run=nums", "method=cube", data_root=tmp_path)
+    run("run", "apply", "b", "numbers_run=nums", "method=cube", data_root=tmp_path)
+    result = run("runs", "apply", "cube", data_root=tmp_path)
     assert result.exit_code == 0
     assert result.output.split() == ["a", "b"]
+
+
+def test_methods_list_shows_display_name():
+    result = runner.invoke(app, ["methods", "list"])
+    assert result.exit_code == 0
+    assert result.output == "cube\tCube (x³)\nsquare\n"
 
 
 def test_failed_run_requires_resume(tmp_path):

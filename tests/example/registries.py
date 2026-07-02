@@ -1,11 +1,8 @@
 from __future__ import annotations
 
-from plum import Registry, Source
+from plum import Pipeline, Registry
 
+from tests.example.methods.base import Method
 
-class Greeter(Source):
-    def greet(self) -> str:
-        return f"hello from {self.display_name or self.id}"
-
-
-GREETERS: Registry[type[Greeter]] = Registry("greeter")
+PIPELINES: Registry[type[Pipeline]] = Registry("pipeline", key="name")
+METHODS: Registry[type[Method]] = Registry("method")

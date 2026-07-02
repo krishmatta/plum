@@ -8,8 +8,8 @@ from typing import ClassVar
 
 
 class Source(abc.ABC):
-    """Marker base for a pluggable strategy registered in a source family
-    (datasets, confidence methods, …). The only contract is a registry key."""
+    """Marker base for a pluggable strategy looked up by name in a registry.
+    The only contract is the `id` key."""
 
     id: ClassVar[str]
     display_name: ClassVar[str] = ""
