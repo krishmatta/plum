@@ -1,24 +1,10 @@
 from typer.testing import CliRunner
 
-from plum import Pipeline, Store, load_manifest
+from plum import Pipeline, Registry, Store, build_cli, load_manifest
 
-from tests.example.app import CATALOG, PIPELINES, Numbers, app
+from tests.example.app import CATALOG, Numbers, app
 
 runner = CliRunner()
-
-
-class Boom(Pipeline):
-    name = "boom"
-    produces = "numbers"
-
-    class Params(Pipeline.Params):
-        pass
-
-    def _run(self, ctx):
-        raise RuntimeError("kaboom")
-
-
-PIPELINES.register(Boom)
 
 
 def run(*args, data_root):
@@ -81,8 +67,23 @@ def test_runs_lists_run_ids(tmp_path):
 
 
 def test_failed_run_requires_resume(tmp_path):
-    run("run", "boom", "r1", data_root=tmp_path)  # fails, writes error manifest
-    result = run("run", "boom", "r1", data_root=tmp_path)
+    class Boom(Pipeline):
+        name = "boom"
+        produces = "numbers"
+
+        class Params(Pipeline.Params):
+            pass
+
+        def _run(self, ctx):
+            raise RuntimeError("kaboom")
+
+    boom_reg: Registry[type[Pipeline]] = Registry("pipeline", key="name")
+    boom_reg.register(Boom)
+    boom_app = build_cli(catalog=CATALOG, pipelines=boom_reg)
+
+    args = ["run", "boom", "r1", "--data-root", str(tmp_path)]
+    runner.invoke(boom_app, args)  # fails, writes error manifest
+    result = runner.invoke(boom_app, args)
     assert result.exit_code == 1
     assert "previously failed" in result.output
     assert "resume=True" in result.output
