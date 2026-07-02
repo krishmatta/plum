@@ -51,6 +51,40 @@ def test_finalize_concatenates_in_order(tmp_path):
     assert codec().read(out) == all_items
 
 
+def test_finalize_removes_shards_dir(tmp_path):
+    all_items = items(10)
+    shards = Shards(tmp_path, 10, 4, codec())
+    for idx, sl in shards.pending:
+        shards.write(idx, all_items[sl])
+    assert shards.shards_dir.exists()
+    shards.finalize(tmp_path / "out.jsonl")
+    assert not shards.shards_dir.exists()
+
+
+def test_finalize_is_idempotent_after_cleanup(tmp_path):
+    all_items = items(10)
+    shards = Shards(tmp_path, 10, 4, codec())
+    for idx, sl in shards.pending:
+        shards.write(idx, all_items[sl])
+    out = shards.finalize(tmp_path / "out.jsonl")
+    again = shards.finalize(tmp_path / "out.jsonl")
+    assert again == out
+    assert codec().read(again) == all_items
+
+
+def test_resume_then_finalize_cleans_up(tmp_path):
+    all_items = items(10)
+    first = Shards(tmp_path, 10, 4, codec())
+    for idx, sl in first.pending[:2]:
+        first.write(idx, all_items[sl])
+    resumed = Shards(tmp_path, 10, 4, codec())
+    for idx, sl in resumed.pending:
+        resumed.write(idx, all_items[sl])
+    out = resumed.finalize(tmp_path / "out.jsonl")
+    assert codec().read(out) == all_items
+    assert not resumed.shards_dir.exists()
+
+
 def test_zero_items(tmp_path):
     shards = Shards(tmp_path, 0, 4, codec())
     assert shards.pending == []

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import re
+import shutil
 from pathlib import Path
 from typing import Any
 
@@ -88,6 +89,8 @@ class Shards:
 
     def finalize(self, final_path: Path | str) -> Path:
         final_path = Path(final_path)
+        if final_path.exists() and not self.shards_dir.exists():
+            return final_path
         paths = [self._shard_path(i) for i in range(self.total_shards)]
         missing = [p for p in paths if not p.exists()]
         if missing:
@@ -99,4 +102,5 @@ class Shards:
                 raise TypeError(f"shard {p} is not a list; got {type(part)}")
             combined.extend(part)
         self.codec.write(combined, final_path)
+        shutil.rmtree(self.shards_dir, ignore_errors=True)
         return final_path
