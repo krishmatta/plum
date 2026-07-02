@@ -65,13 +65,11 @@ class RunContext:
         store: Store,
         produces: str,
         scope: str | None,
-        force: bool = False,
     ):
         self.params = params
         self.run_id = run_id
         self.run_dir = run_dir
         self.store = store
-        self.force = force
         self.stats: dict = {}
         self._produces = produces
         self._scope = scope
@@ -164,7 +162,6 @@ class Pipeline(abc.ABC):
             store=self.store,
             produces=self.produces,
             scope=scope,
-            force=force,
         )
         try:
             self._run(ctx)
