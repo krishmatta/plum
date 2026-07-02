@@ -11,6 +11,10 @@ M = TypeVar("M", bound=BaseModel)
 
 
 class TorchListCodec(Generic[M]):
+    """Reads via ``torch.load(weights_only=False)``, which unpickles arbitrary
+    objects and can execute code. Only read files you (or your pipeline) wrote.
+    """
+
     extension = ".pth"
 
     def __init__(

@@ -32,6 +32,19 @@ def test_write_atomic_creates_parents_and_no_tmp(tmp_path):
     assert list(tmp_path.rglob("*.tmp")) == []
 
 
+def test_write_atomic_cleans_up_on_failure(tmp_path):
+    target = tmp_path / "file.txt"
+
+    def boom(p):
+        p.write_text("partial")
+        raise RuntimeError("writer failed")
+
+    with pytest.raises(RuntimeError):
+        write_atomic(target, boom)
+    assert not target.exists()
+    assert list(tmp_path.iterdir()) == []
+
+
 def test_json_model_codec_roundtrip(tmp_path):
     codec = JsonModelCodec(Point)
     path = tmp_path / "p.json"
@@ -48,6 +61,28 @@ def test_infer_arrow_schema():
     assert schema.field("tags").type == pa.list_(pa.string())
     assert pa.types.is_struct(schema.field("point").type)
     assert schema.field("note").type == pa.string()
+
+
+def test_infer_arrow_schema_nullability():
+    schema = infer_arrow_schema(Record)
+    assert not schema.field("id").nullable
+    assert schema.field("note").nullable
+
+
+def test_infer_arrow_schema_variadic_tuple():
+    class WithTuple(BaseModel):
+        vals: tuple[int, ...]
+
+    schema = infer_arrow_schema(WithTuple)
+    assert schema.field("vals").type == pa.list_(pa.int64())
+
+
+def test_infer_arrow_schema_fixed_tuple_raises():
+    class Fixed(BaseModel):
+        pair: tuple[int, str]
+
+    with pytest.raises(TypeError):
+        infer_arrow_schema(Fixed)
 
 
 def test_infer_arrow_schema_multi_union_raises():

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Callable, Generic, Iterator, TypeVar
+from typing import Callable, Generic, Iterator, TypeVar, overload
 
 from plum.errors import DuplicateRegistration, UnknownName
 
@@ -12,6 +12,12 @@ class Registry(Generic[T]):
         self.kind = kind
         self.key = key
         self._items: dict[str, T] = {}
+
+    @overload
+    def register(self, obj: T, *, name: str | None = None) -> T: ...
+
+    @overload
+    def register(self, obj: None = None, *, name: str | None = None) -> Callable[[T], T]: ...
 
     def register(
         self, obj: T | None = None, *, name: str | None = None
@@ -27,7 +33,16 @@ class Registry(Generic[T]):
         return obj
 
     def _add(self, obj: T, name: str | None) -> None:
-        key = name if name is not None else getattr(obj, self.key)
+        if name is not None:
+            key = name
+        else:
+            try:
+                key = getattr(obj, self.key)
+            except AttributeError:
+                raise TypeError(
+                    f"cannot register {obj!r} in {self.kind} registry: "
+                    f"no '{self.key}' attribute and no explicit name given"
+                ) from None
         if not isinstance(key, str):
             raise TypeError(
                 f"{self.kind} registry key must be a str; got {type(key).__name__} "
@@ -45,6 +60,9 @@ class Registry(Generic[T]):
 
     def names(self) -> list[str]:
         return sorted(self._items)
+
+    def items(self) -> list[tuple[str, T]]:
+        return [(name, self._items[name]) for name in self.names()]
 
     def __contains__(self, name: object) -> bool:
         return name in self._items

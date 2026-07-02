@@ -65,6 +65,23 @@ def test_unknown_raises_with_known_names():
     assert exc.value.known == ["a", "b"]
 
 
+def test_missing_key_attribute_raises():
+    class NoId:
+        pass
+
+    reg: Registry[NoId] = Registry("thing")
+    with pytest.raises(TypeError, match="no 'id' attribute"):
+        reg.register(NoId())
+
+
+def test_items_sorted_by_name():
+    reg: Registry[Widget] = Registry("widget")
+    b, a = Widget("b"), Widget("a")
+    reg.register(b)
+    reg.register(a)
+    assert reg.items() == [("a", a), ("b", b)]
+
+
 def test_non_str_key_raises():
     class Bad:
         id = 123
