@@ -76,6 +76,22 @@ def test_init_scaffolds_into_project(tmp_path):
     assert '"demo:main"' not in pyproject
 
 
+def test_init_gitignores_data(tmp_path):
+    fake_uv_project(tmp_path)
+    (tmp_path / ".gitignore").write_text(".venv\n")
+    scaffold.init(tmp_path)
+    lines = (tmp_path / ".gitignore").read_text().splitlines()
+    assert "/data/" in lines
+    assert ".venv" in lines  # existing entries preserved
+
+
+def test_init_gitignore_data_is_idempotent(tmp_path):
+    fake_uv_project(tmp_path)
+    scaffold.init(tmp_path)
+    scaffold.init(tmp_path, force=True)
+    assert (tmp_path / ".gitignore").read_text().count("/data/") == 1
+
+
 def test_init_requires_src_package(tmp_path):
     with pytest.raises(ScaffoldError):
         scaffold.init(tmp_path)

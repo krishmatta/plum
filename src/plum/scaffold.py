@@ -25,6 +25,7 @@ def init(project: Path | str | None = None, *, force: bool = False) -> str:
     pkg_dir = _preflight(project, force=force)
     _render_templates(pkg_dir, pkg_dir.name)
     _repoint_script(project / "pyproject.toml", pkg_dir.name)
+    _ignore_data(project / ".gitignore")
     return pkg_dir.name
 
 
@@ -77,6 +78,16 @@ def _render_tree(src: Traversable, dest: Path, package: str) -> None:
         target.parent.mkdir(parents=True, exist_ok=True)
         text = item.read_text(encoding="utf-8").replace("{{ package }}", package)
         target.write_text(text, encoding="utf-8")
+
+
+def _ignore_data(gitignore: Path) -> None:
+    entry = "/data/"
+    existing = gitignore.read_text(encoding="utf-8") if gitignore.exists() else ""
+    if entry in existing.splitlines():
+        return
+    prefix = "" if not existing or existing.endswith("\n") else "\n"
+    with gitignore.open("a", encoding="utf-8") as f:
+        f.write(f"{prefix}{entry}\n")
 
 
 def _repoint_script(pyproject: Path, package: str) -> None:
