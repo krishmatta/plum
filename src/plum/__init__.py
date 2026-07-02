@@ -23,6 +23,7 @@ from plum.errors import (
 )
 from plum.pipeline import (
     GitInfo,
+    InputRef,
     Pipeline,
     RunContext,
     RunManifest,
@@ -39,6 +40,7 @@ __all__ = [
     "DirtyWorkingTree",
     "GitInfo",
     "DuplicateRegistration",
+    "InputRef",
     "capture_git",
     "JsonModelCodec",
     "JsonlCodec",

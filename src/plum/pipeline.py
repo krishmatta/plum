@@ -53,6 +53,15 @@ def capture_git(cwd: Path) -> GitInfo | None:
     return GitInfo(sha=head.stdout.strip(), branch=branch or None)
 
 
+class InputRef(BaseModel):
+    """One upstream artifact a run read: an edge in the artifact graph. Minimal
+    on purpose -- everything else about the input is in its own manifest."""
+
+    artifact: str
+    run_id: str
+    scope: str | None = None
+
+
 class RunManifest(BaseModel):
     """Reproducibility record written to every run directory as manifest.json.
 
@@ -65,6 +74,7 @@ class RunManifest(BaseModel):
     params: dict = {}
     stats: dict = {}
     git: GitInfo | None = None
+    inputs: list[InputRef] = []
     started_at: str = Field(default_factory=_timestamp)
     finished_at: str | None = None
     error: str | None = None
@@ -102,6 +112,7 @@ class RunContext:
         self.run_dir = run_dir
         self.store = store
         self.stats: dict = {}
+        self._inputs: list[InputRef] = []
         self._produces = produces
         self._scope = scope
 
@@ -109,7 +120,11 @@ class RunContext:
         return self.run_dir / filename
 
     def read(self, artifact: str, run_id: str, *, scope: str | None = None) -> Any:
-        return self.store.read(artifact, run_id, scope=scope)
+        obj = self.store.read(artifact, run_id, scope=scope)
+        ref = InputRef(artifact=artifact, run_id=run_id, scope=scope)
+        if ref not in self._inputs:
+            self._inputs.append(ref)
+        return obj
 
     def output(self, obj: Any) -> Path:
         return self.store.write(self._produces, self.run_id, obj, scope=self._scope)
@@ -213,6 +228,7 @@ class Pipeline(abc.ABC):
             raise
         finally:
             manifest.stats = ctx.stats
+            manifest.inputs = ctx._inputs
             manifest.finished_at = _timestamp()
             self._write_manifest(run_dir, manifest)
         return manifest
