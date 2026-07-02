@@ -47,7 +47,7 @@ plum defers project creation to uv:
 ```console
 $ uv init --package myproj
 $ cd myproj
-$ uv add "plum @ git+https://github.com/krishmatta/plum"
+$ uv add "data-plum @ git+https://github.com/krishmatta/plum"
 $ uv run plum init
 $ git add -A && git commit -m scaffold
 $ uv run myproj experiments run demo

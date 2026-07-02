@@ -1,12 +1,14 @@
 [project]
-name = "plum"
+name = "data-plum"
 version = "0.1.0"
-description = "A reusable research-pipeline library: pipelines, artifacts, catalog, registries."
+description = "A data plumbing library for research pipelines"
 readme = "README.md"
 authors = [
     { name = "Krish Matta", email = "self@krishmatta.net" }
 ]
 requires-python = ">=3.10"
+license = "MIT"
+license-files = ["LICENSE"]
 dependencies = [
     "click>=8.4.2",
     "pydantic>=2",
@@ -23,6 +25,9 @@ plum = "plum.__main__:app"
 [build-system]
 requires = ["uv_build>=0.9.9,<0.10.0"]
 build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-name = "plum"
 
 [dependency-groups]
 dev = [
