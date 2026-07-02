@@ -1,15 +1,85 @@
 # plum
 
-A data plumbing library.
+A small, opinionated library for research pipelines. Each stage produces one
+versioned artifact; every run is reproducible by construction; orchestration is
+plain, committed Python. It steals Kedro's data-catalog idea, keeps a resumable
+execution core, and leans on **git + uv** so that the moment you produce an
+artifact you can always answer *what code, what inputs, and what params made
+this — and reproduce it.*
+
+## Why plum
+
+Most of what makes plum useful is invisible until you've been burned by its
+absence. The design is a set of deliberate, opinionated defaults:
+
+### Reproducibility by construction
+**A run refuses to start if your git tree is dirty.** That one rule is the whole
+game: because a dirty run is impossible, every run's `manifest.json` records the
+exact commit that produced it. Six months later you don't guess which version of
+the code made an artifact — you read its manifest and `git checkout <sha>`. No
+archaeology, no "I think it was around then."
+
+### The commit is a *complete* environment fingerprint (git + uv)
+plum doesn't reinvent packaging — it defers entirely to **uv**. `uv init
+--package` lays down the src-layout, `pyproject.toml`, a pinned
+`.python-version`, and the git repo; `plum init` only drops in the plum-specific
+files. The payoff compounds with the clean-tree rule: an uncommitted `uv.lock`
+*is* a dirty tree, so a run can only happen when the lockfile is committed —
+which means the recorded commit SHA pins not just your code but **every
+dependency version and the Python itself**. That's why the manifest stores only
+the commit, not a soup of package versions: the SHA already is them.
+
+(uv is required to *scaffold* a project, not to run one — the library imports
+fine under plain pip. `plum init` also gitignores `data/` so your own outputs
+never dirty the tree.)
+
+### One pipeline, one artifact
+Every pipeline produces exactly one artifact into
+`data/<artifact>/<scope>/<run_id>/`. The run directory is the unit of
+everything — manifest, output, and checkpoints all live together — and
+addressing stays trivial. No multi-output bookkeeping; a "variant" is just
+another artifact with its own pipeline.
+
+### Provenance you can trust
+Every `ctx.read` is recorded in the manifest as an input edge — the upstream
+artifact, run id, and scope — **plus a stamp of the exact generation read** (the
+upstream's commit and finish time). So lineage is traceable backward, and
+because run ids are mutable pointers, the stamp lets you *detect* when an
+upstream was regenerated out from under a downstream instead of silently
+believing a stale reference.
+
+### Resumable by default
+Expensive, interruptible work checkpoints into shards. Kill a six-hour job at
+hour five, rerun, and it resumes at the last shard — skipping the expensive
+setup entirely when there's nothing left to do. Finished runs are cached no-ops;
+interrupted runs resume in place.
+
+### Declare each artifact once
+The catalog maps an artifact name to a codec (`JsonModelCodec`, `JsonlCodec`,
+`ParquetCodec`, `TorchListCodec`, or your own) in exactly one place. Read and
+write by name anywhere; swap the on-disk format without touching a single call
+site. Registries + `autodiscover` mean you add a pipeline, method, or experiment
+by dropping in a file — no import lists to maintain.
+
+### Experiments are committed scripts, not config
+Your ablation is Python, version-controlled, and git-clean-gated — so running it
+pins the whole experiment to a commit. Reuse is trivial: run a shared upstream
+once, pass its run id downstream. `sweep()` turns a param grid into runs with
+deterministic, meaningful run ids. It replaces the ad-hoc `./scripts/` bash
+every project grows.
+
+### Runs carry intent
+At a terminal, `run` opens `$EDITOR` for a description and aborts on an empty
+message — git-commit UX — so a run records *why*, not just its params. Scripts
+pass the message programmatically.
 
 ## The model
 
-A project is a set of pipelines. Each pipeline produces one artifact (a named
-on-disk output). Each execution of a pipeline is a run:
+A project is a set of pipelines. Each execution of a pipeline is a run:
 
 ```
 data/<artifact>/<scope>/<run_id>/
-├── manifest.json      # params, stats, status, timing, error
+├── manifest.json      # status, description, params, stats, git commit, inputs, timing
 ├── <artifact file>
 └── shards/            # checkpoints, if the pipeline shards
 ```
@@ -24,15 +94,31 @@ data/<artifact>/<scope>/<run_id>/
 | `Registry` | Name to object lookup. Unknown names error with the known names listed. |
 | `Source` | A pluggable strategy in a registry. `autodiscover(pkg)` imports a package so registrations run. |
 | `Shards` | Checkpointed, resumable output within a run. |
+| `Experiment` | A committed, runnable script. Orchestrates pipelines via a `Runner`; `sweep()` fans out params. |
 
-## Example
+## Start a new project
+
+plum defers project creation to uv, then scaffolds its own files:
+
+```console
+$ uv init --package myproj
+$ cd myproj
+$ uv add "plum @ git+https://github.com/krishmatta/plum"
+$ uv run plum init
+$ git add -A && git commit -m "scaffold"     # runs require a clean tree
+$ uv run myproj experiments run demo
+```
+
+`plum init` renders `catalog.py`, `registries.py`, `schema.py`, a `pipelines/`
+package, an `experiments/` package, and `app.py` into `src/myproj/`, and points
+the console script at the app.
+
+## A worked example
 
 Lives at `tests/example/`, run by the test suite.
 
-Records:
-
 ```python
-# myproj/schema.py
+# schema.py
 class Numbers(BaseModel):
     values: list[int]
 
@@ -41,61 +127,22 @@ class Power(BaseModel):
     y: int
 ```
 
-Artifacts:
-
 ```python
-# myproj/catalog.py
+# catalog.py — every on-disk output, declared once
 CATALOG = Catalog()
 CATALOG.register(Artifact("numbers", JsonModelCodec(Numbers)))  # numbers.json
 CATALOG.register(Artifact("powers", JsonlCodec(Power)))         # powers.jsonl
 ```
 
-Registries:
-
 ```python
-# myproj/registries.py
+# registries.py
 PIPELINES: Registry[type[Pipeline]] = Registry("pipeline", key="name")
 METHODS: Registry[type[Method]] = Registry("method")
+EXPERIMENTS: Registry[type[Experiment]] = Registry("experiment")
 ```
 
-A source family. Modules register themselves; no import lists:
-
 ```python
-# myproj/methods/base.py
-class Method(Source):
-    @abc.abstractmethod
-    def apply(self, x: int) -> int: ...
-
-# myproj/methods/cube.py        (square.py is the same idea)
-@METHODS.register
-class Cube(Method):
-    id = "cube"
-    display_name = "Cube (x³)"
-
-    def apply(self, x: int) -> int:
-        return x**3
-```
-
-Pipelines. `Apply` reads a `load` run by id and checkpoints every 4 items:
-
-```python
-# myproj/pipelines/example.py
-@PIPELINES.register
-class Load(Pipeline):
-    name = "load"
-    # the catalog artifact this pipeline writes; also its dir under data/
-    produces = "numbers"
-
-    class Params(Pipeline.Params):
-        n: int = 10
-
-    def _run(self, ctx):
-        values = list(range(ctx.params.n))
-        ctx.stats["count"] = len(values)  # recorded in this run's manifest.json
-        # encoded by the artifact's codec into the run dir
-        ctx.output(Numbers(values=values))
-
-
+# pipelines/apply.py — reads a `load` run by id, checkpoints every 4 items
 @PIPELINES.register
 class Apply(Pipeline):
     name = "apply"
@@ -106,76 +153,61 @@ class Apply(Pipeline):
         method: str = "square"
 
     def scope(self, params):
-        return params.method  # extra path segment: data/powers/<method>/<run_id>/
+        return params.method  # -> data/powers/<method>/<run_id>/
 
     def _run(self, ctx):
-        # upstream artifact by run id; unscoped because load runs are unscoped
-        xs = ctx.read("numbers", ctx.params.numbers_run).values
-        # checkpoint every 4 items; a rerun recomputes only missing shards
+        xs = ctx.read("numbers", ctx.params.numbers_run).values   # recorded as lineage
         shards = ctx.shards(len(xs), shard_size=4, codec=JsonlCodec(Power))
-        if shards.pending:  # empty on a resumed finished run, so setup is skipped
-            # sources are looked up by name at run time; stand-in for expensive setup
+        if shards.pending:                       # empty on a resumed finished run
             method = METHODS.get(ctx.params.method)()
             for idx, sl in shards.pending:
                 shards.write(idx, [Power(x=x, y=method.apply(x)) for x in xs[sl]])
-        # concatenate the shards into the powers artifact at its catalog path
         shards.finalize(ctx.output_path())
         ctx.stats["count"] = len(xs)
 ```
 
-Wiring:
+```python
+# experiments/method_sweep.py — a reproducible sweep over a shared upstream
+@EXPERIMENTS.register
+class MethodSweep(Experiment):
+    id = "method-sweep"
+
+    def run(self, runner):
+        runner.run("load", "base", n=6, description="shared numbers")   # computed once
+        for params, run_id in sweep({"method": ["square", "cube"]},
+                                    run_id=lambda p: f"pow-{p['method']}"):
+            runner.run("apply", run_id, numbers_run="base", method=params["method"],
+                       description=f"powers via {params['method']}")
+```
 
 ```python
-# myproj/app.py
-import myproj.methods
-import myproj.pipelines
-from plum import autodiscover, build_cli
-
-# imports every module in pipelines/ and methods/, running their registrations
-autodiscover(myproj.pipelines)
-autodiscover(myproj.methods)
-
-# sources= adds a `methods list` subcommand
-app = build_cli(catalog=CATALOG, pipelines=PIPELINES, sources={"methods": METHODS})
+# app.py
+autodiscover(pipelines); autodiscover(methods); autodiscover(experiments)
+app = build_cli(catalog=CATALOG, pipelines=PIPELINES,
+                sources={"methods": METHODS}, experiments=EXPERIMENTS)
 ```
 
 ## CLI
 
-Point a console script at `app` (`myproj = "myproj.app:app"` under
-`[project.scripts]`). Params are `key=value`, JSON-parsed when possible:
+`build_cli` mounts a subcommand only for the capabilities a project declares.
+Params are `key=value`, JSON-parsed when possible:
 
 ```console
-$ myproj run load nums n=6
+$ myproj run load nums n=6 -m "baseline"     # -m, or $EDITOR opens at a terminal
 load run 'nums': ok
 data/numbers/nums/numbers.json
 
-$ myproj run apply p1 numbers_run=nums method=cube
-apply run 'p1': ok
-data/powers/cube/p1/powers.jsonl
+$ myproj run apply p1 numbers_run=nums method=cube -m "cube ablation"
+$ myproj run load nums                         # same run id: cached, no prompt
 
-$ myproj run load nums              # same run id: skipped
-$ myproj runs apply cube            # p1
-$ myproj pipelines list             # apply, load
+$ myproj runs apply cube                       # table: id, status, started, finished, duration
+$ myproj show apply p1 cube                    # dumps the manifest as JSON (pipe to jq)
+
+$ myproj pipelines list                        # apply, load
 $ myproj pipelines params apply
-numbers_run: str (required)
-method: str = 'square'
-
-$ myproj methods list
-cube	Cube (x³)
-square
-```
-
-On disk:
-
-```
-data/
-├── numbers/nums/
-│   ├── manifest.json
-│   └── numbers.json
-└── powers/cube/p1/          # scoped by method
-    ├── manifest.json
-    ├── powers.jsonl
-    └── shards/              # shard_00000.jsonl ..., meta.json (geometry guard)
+$ myproj methods list                          # a `list` per source family
+$ myproj experiments list                      # method-sweep
+$ myproj experiments run method-sweep
 ```
 
 ## Reruns
@@ -183,45 +215,22 @@ data/
 `run(run_id)` is idempotent, keyed on the manifest:
 
 - `ok`: skipped.
-- `running` (interrupted): resumes in place. A sharded pipeline recomputes
-  only the missing shards, and skips the expensive setup when none are.
-- `error`: refuses with `PriorRunFailed`, quoting the stored exception. Pass
-  `--resume` to continue from checkpoints or `--force` to start over. A
-  failing body always leaves a manifest with the full traceback.
+- `running` (interrupted): resumes in place; a sharded pipeline recomputes only
+  the missing shards and skips the expensive setup when none are.
+- `error`: refuses with `PriorRunFailed`. `--resume` continues from checkpoints,
+  `--force` starts over. A failing body always leaves a manifest with the full
+  traceback.
 
-Params are part of the identity check: rerunning or resuming a run id with
-different params raises `ParamsMismatch` rather than silently reusing prior
-work. Use `--force` to recompute from scratch.
-
-Every write is atomic, so whatever a crashed run left behind is complete.
+Params are part of identity: rerunning or resuming a run id with different params
+raises `ParamsMismatch` rather than silently reusing prior work. Every write is
+atomic, so a crashed run never leaves a half-written artifact.
 
 ## Install
 
-Core depends on `pydantic` and `typer`. The parquet and torch codecs import
-lazily behind extras:
+Core depends on `pydantic`, `typer`, and `click`. The parquet and torch codecs
+import lazily behind extras:
 
 ```console
 $ pip install plum[parquet]   # pyarrow
 $ pip install plum[torch]     # torch
-```
-
-## Starting a new project
-
-plum defers project creation to uv, then scaffolds its own files into the
-project. From an empty directory:
-
-```console
-$ uv init --package myproj
-$ cd myproj
-$ uv add "plum @ git+https://github.com/krishmatta/plum"
-$ uv run plum init
-```
-
-`plum init` renders `catalog.py`, `registries.py`, `schema.py`, a `pipelines/`
-package with a starter pipeline, and `app.py` into `src/myproj/`, and points the
-project's console script at the app. Then run it:
-
-```console
-$ uv run myproj run load r1 n=5
-$ uv run myproj runs load
 ```
