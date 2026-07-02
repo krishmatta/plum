@@ -61,3 +61,13 @@ class PriorRunFailed(PlumError):
             f"{pipeline} run '{run_id}' previously failed{cause}; "
             "pass resume=True to continue from checkpoints or force=True to start over"
         )
+
+
+class DirtyWorkingTree(PlumError):
+    def __init__(self, repo: str, reason: str) -> None:
+        self.repo = repo
+        self.reason = reason
+        super().__init__(
+            f"refusing to run: {repo} {reason}; commit (or gitignore) so this run "
+            "maps to a clean commit"
+        )

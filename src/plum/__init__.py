@@ -13,6 +13,7 @@ from plum.codecs import (
 )
 from plum.config import Params, parse_kw
 from plum.errors import (
+    DirtyWorkingTree,
     DuplicateRegistration,
     ParamsMismatch,
     PlumError,
@@ -20,7 +21,14 @@ from plum.errors import (
     UnknownArtifact,
     UnknownName,
 )
-from plum.pipeline import Pipeline, RunContext, RunManifest, load_manifest
+from plum.pipeline import (
+    GitInfo,
+    Pipeline,
+    RunContext,
+    RunManifest,
+    capture_git,
+    load_manifest,
+)
 from plum.registry import Registry
 from plum.sources import Source, autodiscover
 
@@ -28,7 +36,10 @@ __all__ = [
     "Artifact",
     "Catalog",
     "Codec",
+    "DirtyWorkingTree",
+    "GitInfo",
     "DuplicateRegistration",
+    "capture_git",
     "JsonModelCodec",
     "JsonlCodec",
     "Params",

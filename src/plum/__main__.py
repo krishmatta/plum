@@ -27,7 +27,7 @@ def init(
         typer.echo(str(e), err=True)
         raise typer.Exit(1)
     typer.echo(f"scaffolded plum project '{package}'")
-    typer.echo(f"next: uv run {package} run load r1 n=5")
+    typer.echo(f"next: git add -A && git commit, then uv run {package} run load r1 n=5")
 
 
 if __name__ == "__main__":

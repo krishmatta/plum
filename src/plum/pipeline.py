@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import abc
 import shutil
+import subprocess
 import traceback
 from datetime import datetime, timezone
 from pathlib import Path
@@ -12,7 +13,7 @@ from pydantic import BaseModel, Field
 from plum.catalog import Store
 from plum.checkpoint import Shards
 from plum.codecs import Codec, write_atomic
-from plum.errors import ParamsMismatch, PriorRunFailed
+from plum.errors import DirtyWorkingTree, ParamsMismatch, PriorRunFailed
 
 import plum.config
 
@@ -21,6 +22,35 @@ MANIFEST_FILE = "manifest.json"
 
 def _timestamp() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+class GitInfo(BaseModel):
+    sha: str
+    branch: str | None = None
+
+
+def _git(cwd: Path, *args: str) -> subprocess.CompletedProcess:
+    return subprocess.run(
+        ["git", "-C", str(cwd), *args], capture_output=True, text=True
+    )
+
+
+def capture_git(cwd: Path) -> GitInfo | None:
+    """The commit a run maps to. Raise DirtyWorkingTree in a dirty repo; None
+    outside one. With a clean tree and a committed uv.lock, the sha pins the
+    exact code and dependencies, so nothing else needs recording."""
+    if shutil.which("git") is None:
+        return None
+    if _git(cwd, "rev-parse", "--show-toplevel").returncode != 0:
+        return None  # not inside a git repo
+    repo = _git(cwd, "rev-parse", "--show-toplevel").stdout.strip()
+    head = _git(cwd, "rev-parse", "HEAD")
+    if head.returncode != 0:
+        raise DirtyWorkingTree(repo, "has no commits yet")
+    if _git(cwd, "status", "--porcelain").stdout.strip():
+        raise DirtyWorkingTree(repo, "has uncommitted changes")
+    branch = _git(cwd, "rev-parse", "--abbrev-ref", "HEAD").stdout.strip()
+    return GitInfo(sha=head.stdout.strip(), branch=branch or None)
 
 
 class RunManifest(BaseModel):
@@ -34,6 +64,7 @@ class RunManifest(BaseModel):
     status: str = "running"  # running | ok | error
     params: dict = {}
     stats: dict = {}
+    git: GitInfo | None = None
     started_at: str = Field(default_factory=_timestamp)
     finished_at: str | None = None
     error: str | None = None
@@ -134,6 +165,8 @@ class Pipeline(abc.ABC):
         p = self.Params(**params)
         # An undeclared `produces` must fail here, not hours later at ctx.output().
         self.store.catalog.get(self.produces)
+        # Refuse a dirty tree before touching disk, so every run maps to a commit.
+        git = capture_git(Path.cwd())
         scope = self.scope(p)
         run_dir = self.store.run_dir(self.produces, run_id, scope=scope)
 
@@ -157,7 +190,10 @@ class Pipeline(abc.ABC):
         run_dir.mkdir(parents=True, exist_ok=True)
 
         manifest = RunManifest(
-            pipeline=self.name, run_id=run_id, params=p.model_dump(mode="json")
+            pipeline=self.name,
+            run_id=run_id,
+            params=p.model_dump(mode="json"),
+            git=git,
         )
         self._write_manifest(run_dir, manifest)
         ctx = RunContext(
