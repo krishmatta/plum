@@ -174,7 +174,7 @@ data/
 └── powers/cube/p1/          # scoped by method
     ├── manifest.json
     ├── powers.jsonl
-    └── shards/              # shard_00000.jsonl ...
+    └── shards/              # shard_00000.jsonl ..., meta.json (geometry guard)
 ```
 
 ## Reruns

@@ -1,10 +1,11 @@
 from __future__ import annotations
 
+import json
 import re
 from pathlib import Path
 from typing import Any
 
-from plum.codecs import Codec
+from plum.codecs import Codec, write_atomic
 
 SHARD_RE = re.compile(r"^shard_(\d{5})(\..+)$")
 
@@ -30,6 +31,28 @@ class Shards:
         self.shard_size = shard_size
         self.codec = codec
         self.total_shards = (n_items + shard_size - 1) // shard_size if n_items > 0 else 0
+        # Validating geometry at construction is what guarantees no stale shard
+        # can be reused: pending/_completed only run after __init__ returns.
+        self._check_geometry()
+
+    def _check_geometry(self) -> None:
+        meta_path = self.shards_dir / "meta.json"
+        if meta_path.exists():
+            stored = json.loads(meta_path.read_text())
+            if stored["n_items"] != self.n_items or stored["shard_size"] != self.shard_size:
+                raise ValueError(
+                    f"shard geometry mismatch: stored "
+                    f"n_items={stored['n_items']}, shard_size={stored['shard_size']}; "
+                    f"requested n_items={self.n_items}, shard_size={self.shard_size}. "
+                    f"Pass force=True to start over."
+                )
+            return
+        write_atomic(
+            meta_path,
+            lambda p: p.write_text(
+                json.dumps({"n_items": self.n_items, "shard_size": self.shard_size})
+            ),
+        )
 
     def _shard_slice(self, idx: int) -> slice:
         start = idx * self.shard_size
