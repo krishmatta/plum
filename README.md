@@ -36,8 +36,9 @@ plum needs `pydantic`, `typer`, and `click`. The parquet and torch codecs are
 optional extras:
 
 ```console
-$ pip install plum[parquet]   # pyarrow
-$ pip install plum[torch]     # torch
+$ pip install data-plum            # import as `plum`
+$ pip install data-plum[parquet]   # pyarrow
+$ pip install data-plum[torch]     # torch
 ```
 
 ## Start a new project
@@ -47,7 +48,7 @@ plum defers project creation to uv:
 ```console
 $ uv init --package myproj
 $ cd myproj
-$ uv add "data-plum @ git+https://github.com/krishmatta/plum"
+$ uv add data-plum
 $ uv run plum init
 $ git add -A && git commit -m scaffold
 $ uv run myproj experiments run demo
