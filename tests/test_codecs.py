@@ -143,6 +143,24 @@ def test_parquet_codec_custom_converter(tmp_path):
     assert codec.read(path) == pts
 
 
+def test_torch_list_codec_tensor_fields(tmp_path):
+    import torch
+    from pydantic import ConfigDict
+
+    class Emb(BaseModel):
+        model_config = ConfigDict(arbitrary_types_allowed=True)
+        id: str
+        vec: torch.Tensor
+
+    codec = TorchListCodec(Emb)
+    path = tmp_path / "emb.pth"
+    objs = [Emb(id="a", vec=torch.tensor([1.0, 2.0])), Emb(id="b", vec=torch.zeros(3))]
+    codec.write(objs, path)
+    out = codec.read(path)
+    assert [o.id for o in out] == ["a", "b"]
+    assert all(torch.equal(a.vec, b.vec) for a, b in zip(objs, out))
+
+
 def test_torch_list_codec_roundtrip(tmp_path):
     codec = TorchListCodec(Point)
     path = tmp_path / "pts.pth"
