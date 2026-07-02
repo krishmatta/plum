@@ -1,44 +1,15 @@
 from __future__ import annotations
 
-import os
 import types
 import typing
 from pathlib import Path
-from typing import Any, Callable, Generic, Protocol, TypeVar, runtime_checkable
+from typing import Any, Callable, Generic, TypeVar
 
 from pydantic import BaseModel
 
+from plum.codecs._atomic import write_atomic
+
 M = TypeVar("M", bound=BaseModel)
-
-
-@runtime_checkable
-class Codec(Protocol):
-    extension: str
-
-    def write(self, obj: Any, path: Path) -> None: ...
-
-    def read(self, path: Path) -> Any: ...
-
-
-def write_atomic(path: Path | str, writer: Callable[[Path], None]) -> None:
-    path = Path(path)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_suffix(path.suffix + ".tmp")
-    writer(tmp)
-    os.replace(tmp, path)
-
-
-class JsonModelCodec(Generic[M]):
-    extension = ".json"
-
-    def __init__(self, model: type[M]) -> None:
-        self.model = model
-
-    def write(self, obj: M, path: Path) -> None:
-        write_atomic(path, lambda p: p.write_text(obj.model_dump_json(indent=2)))
-
-    def read(self, path: Path) -> M:
-        return self.model.model_validate_json(Path(path).read_text())
 
 
 def _arrow_type(annotation: Any):
@@ -117,30 +88,3 @@ class ParquetCodec(Generic[M]):
         import pyarrow.parquet as pq
 
         return [self._from_row(row) for row in pq.read_table(path).to_pylist()]
-
-
-class TorchListCodec(Generic[M]):
-    extension = ".pth"
-
-    def __init__(
-        self,
-        model: type[M],
-        *,
-        to_obj: Callable[[M], Any] | None = None,
-        from_obj: Callable[[Any], M] | None = None,
-    ) -> None:
-        self.model = model
-        self._to_obj = to_obj or (lambda m: m.model_dump())
-        self._from_obj = from_obj or (lambda x: model.model_validate(x))
-
-    def write(self, objs: list[M], path: Path) -> None:
-        import torch
-
-        payload = [self._to_obj(o) for o in objs]
-        write_atomic(path, lambda p: torch.save(payload, p))
-
-    def read(self, path: Path) -> list[M]:
-        import torch
-
-        payload = torch.load(path, weights_only=False, map_location="cpu")
-        return [self._from_obj(x) for x in payload]
