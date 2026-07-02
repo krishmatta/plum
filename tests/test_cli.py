@@ -1,6 +1,6 @@
 from typer.testing import CliRunner
 
-from plum import Pipeline, Registry, Store, build_cli, load_manifest
+from plum import Pipeline, Registry, RunManifest, Store, build_cli, load_manifest
 
 from tests.example.app import app
 from tests.example.catalog import CATALOG
@@ -68,7 +68,55 @@ def test_runs_lists_run_ids_in_scope(tmp_path):
     run("run", "apply", "b", "numbers_run=nums", "method=cube", data_root=tmp_path)
     result = run("runs", "apply", "cube", data_root=tmp_path)
     assert result.exit_code == 0
-    assert result.output.split() == ["a", "b"]
+    ids = [line.split()[0] for line in result.output.splitlines()[1:]]
+    assert ids == ["a", "b"]
+
+
+def test_runs_shows_header_status_and_duration(tmp_path):
+    run("run", "load", "r1", "n=3", data_root=tmp_path)
+    result = run("runs", "load", data_root=tmp_path)
+    assert result.exit_code == 0
+    lines = result.output.splitlines()
+    assert lines[0].split() == ["RUN", "ID", "STATUS", "STARTED", "FINISHED", "DURATION"]
+    assert "r1" in lines[1]
+    assert "ok" in lines[1]
+
+
+def test_runs_empty_reports_no_runs(tmp_path):
+    result = run("runs", "load", data_root=tmp_path)
+    assert result.exit_code == 0
+    assert result.output.strip() == "no runs"
+
+
+def test_runs_marks_missing_manifest(tmp_path):
+    (tmp_path / "numbers" / "ghost").mkdir(parents=True)
+    result = run("runs", "load", data_root=tmp_path)
+    assert result.exit_code == 0
+    assert "ghost" in result.output
+    assert "(no manifest)" in result.output
+
+
+def test_show_dumps_manifest_as_json(tmp_path):
+    run("run", "load", "r1", "n=3", data_root=tmp_path)
+    result = run("show", "load", "r1", data_root=tmp_path)
+    assert result.exit_code == 0
+    m = RunManifest.model_validate_json(result.output)
+    assert m.run_id == "r1"
+    assert m.status == "ok"
+
+
+def test_show_scoped_run(tmp_path):
+    run("run", "load", "nums", data_root=tmp_path)
+    run("run", "apply", "p1", "numbers_run=nums", "method=cube", data_root=tmp_path)
+    result = run("show", "apply", "p1", "cube", data_root=tmp_path)
+    assert result.exit_code == 0
+    assert RunManifest.model_validate_json(result.output).pipeline == "apply"
+
+
+def test_show_unknown_run_exits_nonzero(tmp_path):
+    result = run("show", "load", "nope", data_root=tmp_path)
+    assert result.exit_code == 1
+    assert "no manifest" in result.output
 
 
 def test_methods_list_shows_display_name():

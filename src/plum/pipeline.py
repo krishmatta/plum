@@ -190,6 +190,16 @@ class Pipeline(abc.ABC):
             return []
         return sorted(p.name for p in runs_dir.iterdir() if p.is_dir())
 
+    @final
+    def manifest(self, run_id: str, *, scope: str | None = None) -> RunManifest | None:
+        path = self.store.run_dir(self.produces, run_id, scope=scope) / MANIFEST_FILE
+        if not path.exists():
+            return None
+        try:
+            return load_manifest(path)
+        except Exception:
+            return None
+
     @staticmethod
     def _write_manifest(run_dir: Path, manifest: RunManifest) -> None:
         write_atomic(
