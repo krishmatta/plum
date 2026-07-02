@@ -17,7 +17,7 @@ def test_run_load_writes_artifact(tmp_path):
     result = run("run", "load", "r1", "n=3", data_root=tmp_path)
     assert result.exit_code == 0, result.output
     store = Store(CATALOG, tmp_path)
-    assert store.read("numbers", None, "r1") == Numbers(values=[0, 1, 2])
+    assert store.read("numbers", "r1") == Numbers(values=[0, 1, 2])
 
 
 def test_run_apply_consumes_upstream_scoped_by_method(tmp_path):
@@ -25,13 +25,13 @@ def test_run_apply_consumes_upstream_scoped_by_method(tmp_path):
     result = run("run", "apply", "p1", "numbers_run=nums", "method=cube", data_root=tmp_path)
     assert result.exit_code == 0, result.output
     store = Store(CATALOG, tmp_path)
-    assert store.read("powers", "cube", "p1") == [Power(x=x, y=x**3) for x in range(6)]
+    assert store.read("powers", "p1", scope="cube") == [Power(x=x, y=x**3) for x in range(6)]
     assert (tmp_path / "powers" / "cube" / "p1" / "powers.jsonl").exists()
 
 
 def test_rerun_load_skips(tmp_path):
     run("run", "load", "r1", data_root=tmp_path)
-    manifest_path = Store(CATALOG, tmp_path).run_dir("numbers", None, "r1") / "manifest.json"
+    manifest_path = Store(CATALOG, tmp_path).run_dir("numbers", "r1") / "manifest.json"
     first = load_manifest(manifest_path).finished_at
     run("run", "load", "r1", data_root=tmp_path)
     assert load_manifest(manifest_path).finished_at == first

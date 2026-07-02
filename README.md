@@ -109,8 +109,8 @@ class Apply(Pipeline):
         return params.method  # extra path segment: data/powers/<method>/<run_id>/
 
     def _run(self, ctx):
-        # upstream artifact by run id; scope None because load runs are unscoped
-        xs = ctx.read("numbers", None, ctx.params.numbers_run).values
+        # upstream artifact by run id; unscoped because load runs are unscoped
+        xs = ctx.read("numbers", ctx.params.numbers_run).values
         # checkpoint every 4 items; a rerun recomputes only missing shards
         shards = ctx.shards(len(xs), shard_size=4, codec=JsonlCodec(Power))
         if shards.pending:  # empty on a resumed finished run, so setup is skipped

@@ -38,19 +38,21 @@ class Store:
         self.catalog = catalog
         self.data_root = Path(data_root)
 
-    def run_dir(self, artifact: str, scope: str | None, run_id: str) -> Path:
+    def run_dir(self, artifact: str, run_id: str, *, scope: str | None = None) -> Path:
         return self.data_root.joinpath(*[s for s in (artifact, scope, run_id) if s])
 
-    def path(self, artifact: str, scope: str | None, run_id: str) -> Path:
+    def path(self, artifact: str, run_id: str, *, scope: str | None = None) -> Path:
         a = self.catalog.get(artifact)
-        return self.run_dir(artifact, scope, run_id) / a.resolved_filename
+        return self.run_dir(artifact, run_id, scope=scope) / a.resolved_filename
 
-    def read(self, artifact: str, scope: str | None, run_id: str) -> Any:
+    def read(self, artifact: str, run_id: str, *, scope: str | None = None) -> Any:
         a = self.catalog.get(artifact)
-        return a.codec.read(self.path(artifact, scope, run_id))
+        return a.codec.read(self.path(artifact, run_id, scope=scope))
 
-    def write(self, artifact: str, scope: str | None, run_id: str, obj: Any) -> Path:
+    def write(
+        self, artifact: str, run_id: str, obj: Any, *, scope: str | None = None
+    ) -> Path:
         a = self.catalog.get(artifact)
-        p = self.path(artifact, scope, run_id)
+        p = self.path(artifact, run_id, scope=scope)
         a.codec.write(obj, p)
         return p

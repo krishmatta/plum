@@ -38,7 +38,7 @@ def build_cli(
             pipe = pipeline_cls(store)
             kw = parse_kw(param)
             manifest = pipe.run(run_id, force=force, resume=resume, **kw)
-            out = store.path(pipe.produces, pipe.scope(pipe.Params(**kw)), run_id)
+            out = store.path(pipe.produces, run_id, scope=pipe.scope(pipe.Params(**kw)))
         except (PlumError, ValidationError) as e:
             typer.echo(str(e), err=True)
             raise typer.Exit(1)

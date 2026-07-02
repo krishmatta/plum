@@ -48,7 +48,7 @@ class RunContext:
 
     - `ctx.params` -> the pipeline's validated `Params` instance.
     - `ctx.path(name)` -> a path inside the run directory.
-    - `ctx.read(artifact, scope, run_id)` -> an upstream artifact.
+    - `ctx.read(artifact, run_id, scope=...)` -> an upstream artifact.
     - `ctx.output(obj)` / `ctx.output_path()` -> write / locate the `produces` artifact.
     - `ctx.scratch(name, obj, codec)` -> uncataloged inspectable intermediate.
     - `ctx.shards(...)` -> resumable sharded output, so expensive interruptible
@@ -77,14 +77,14 @@ class RunContext:
     def path(self, filename: str) -> Path:
         return self.run_dir / filename
 
-    def read(self, artifact: str, scope: str | None, run_id: str) -> Any:
-        return self.store.read(artifact, scope, run_id)
+    def read(self, artifact: str, run_id: str, *, scope: str | None = None) -> Any:
+        return self.store.read(artifact, run_id, scope=scope)
 
     def output(self, obj: Any) -> Path:
-        return self.store.write(self._produces, self._scope, self.run_id, obj)
+        return self.store.write(self._produces, self.run_id, obj, scope=self._scope)
 
     def output_path(self) -> Path:
-        return self.store.path(self._produces, self._scope, self.run_id)
+        return self.store.path(self._produces, self.run_id, scope=self._scope)
 
     def scratch(self, name: str, obj: Any, codec: Codec) -> Path:
         path = self.run_dir / f"{name}{codec.extension}"
@@ -135,7 +135,7 @@ class Pipeline(abc.ABC):
         # An undeclared `produces` must fail here, not hours later at ctx.output().
         self.store.catalog.get(self.produces)
         scope = self.scope(p)
-        run_dir = self.store.run_dir(self.produces, scope, run_id)
+        run_dir = self.store.run_dir(self.produces, run_id, scope=scope)
 
         if run_dir.exists():
             if force:
@@ -177,7 +177,7 @@ class Pipeline(abc.ABC):
         return manifest
 
     @final
-    def list_runs(self, scope: str | None) -> list[str]:
+    def list_runs(self, scope: str | None = None) -> list[str]:
         runs_dir = self.store.data_root.joinpath(
             *[s for s in (self.produces, scope) if s]
         )

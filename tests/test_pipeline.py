@@ -53,7 +53,7 @@ def test_successful_run(tmp_path):
     assert manifest.stats == {"value": 7}
     assert manifest.started_at
     assert manifest.finished_at
-    assert store.read("thing", None, "r1") == Payload(value=7)
+    assert store.read("thing", "r1") == Payload(value=7)
 
 
 def test_second_run_skips(tmp_path):
@@ -70,13 +70,13 @@ def test_force_reexecutes(tmp_path):
     pipe.run("r1", value=3)
     pipe.run("r1", value=9, force=True)
     assert pipe.calls == 2
-    assert store.read("thing", None, "r1") == Payload(value=9)
+    assert store.read("thing", "r1") == Payload(value=9)
 
 
 def test_interrupted_run_resumes(tmp_path):
     store = build_store(tmp_path)
     pipe = Thing(store)
-    run_dir = store.run_dir("thing", None, "r1")
+    run_dir = store.run_dir("thing", "r1")
     run_dir.mkdir(parents=True)
     (run_dir / "manifest.json").write_text(
         json.dumps({"pipeline": "thing", "run_id": "r1", "status": "running"})
@@ -102,7 +102,7 @@ def test_error_manifest(tmp_path):
     pipe = Boom(store)
     with pytest.raises(RuntimeError):
         pipe.run("r1")
-    manifest = load_manifest(store.run_dir("thing", None, "r1") / "manifest.json")
+    manifest = load_manifest(store.run_dir("thing", "r1") / "manifest.json")
     assert manifest.status == "error"
     assert "kaboom" in manifest.error
 
@@ -179,7 +179,7 @@ def test_scratch_writes_file(tmp_path):
     store = build_store(tmp_path)
     pipe = Scratcher(store)
     pipe.run("r1")
-    assert (store.run_dir("thing", None, "r1") / "side.jsonl").exists()
+    assert (store.run_dir("thing", "r1") / "side.jsonl").exists()
 
 
 class Sharded(Pipeline):
@@ -201,7 +201,7 @@ def test_sharded_pipeline_finalizes_to_output_path(tmp_path):
     store = build_store(tmp_path)
     pipe = Sharded(store)
     pipe.run("r1")
-    assert store.read("scratchable", None, "r1") == [Payload(value=i) for i in range(5)]
+    assert store.read("scratchable", "r1") == [Payload(value=i) for i in range(5)]
 
 
 class Scoped(Pipeline):
