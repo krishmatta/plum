@@ -81,7 +81,7 @@ def _render_tree(src: Traversable, dest: Path, package: str) -> None:
 
 
 def _ignore_data(gitignore: Path) -> None:
-    entry = "/data/"
+    entry = "data/"
     existing = gitignore.read_text(encoding="utf-8") if gitignore.exists() else ""
     if entry in existing.splitlines():
         return
