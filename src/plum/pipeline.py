@@ -79,6 +79,7 @@ class RunManifest(BaseModel):
     pipeline: str
     run_id: str
     status: str = "running"  # running | ok | error
+    description: str | None = None
     params: dict = {}
     stats: dict = {}
     git: GitInfo | None = None
@@ -199,7 +200,13 @@ class Pipeline(abc.ABC):
 
     @final
     def run(
-        self, run_id: str, *, force: bool = False, resume: bool = False, **params
+        self,
+        run_id: str,
+        *,
+        force: bool = False,
+        resume: bool = False,
+        description: str | None = None,
+        **params,
     ) -> RunManifest:
         if not run_id:
             raise ValueError("run_id is required")
@@ -211,6 +218,7 @@ class Pipeline(abc.ABC):
         scope = self.scope(p)
         run_dir = self.store.run_dir(self.produces, run_id, scope=scope)
 
+        carried_description: str | None = None
         if run_dir.exists():
             if force:
                 shutil.rmtree(run_dir)
@@ -218,6 +226,7 @@ class Pipeline(abc.ABC):
                 manifest_path = run_dir / MANIFEST_FILE
                 if manifest_path.exists():
                     existing = load_manifest(manifest_path)
+                    carried_description = existing.description
                     requested = p.model_dump(mode="json")
                     if existing.params != requested:
                         raise ParamsMismatch(
@@ -233,6 +242,7 @@ class Pipeline(abc.ABC):
         manifest = RunManifest(
             pipeline=self.name,
             run_id=run_id,
+            description=description if description is not None else carried_description,
             params=p.model_dump(mode="json"),
             git=git,
         )
