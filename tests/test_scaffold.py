@@ -81,6 +81,28 @@ def test_init_requires_src_package(tmp_path):
         scaffold.init(tmp_path)
 
 
+def test_init_missing_pyproject_writes_nothing(tmp_path):
+    pkg = tmp_path / "src" / "demo"
+    pkg.mkdir(parents=True)
+    (pkg / "__init__.py").write_text("")
+    with pytest.raises(ScaffoldError):
+        scaffold.init(tmp_path)
+    assert not (pkg / "app.py").exists()
+    assert not (pkg / "pipelines").exists()
+
+
+def test_init_no_script_entry_writes_nothing(tmp_path):
+    pkg = tmp_path / "src" / "demo"
+    pkg.mkdir(parents=True)
+    (pkg / "__init__.py").write_text("")
+    (tmp_path / "pyproject.toml").write_text('[project]\nname = "demo"\n')
+    with pytest.raises(ScaffoldError):
+        scaffold.init(tmp_path)
+    assert not (pkg / "app.py").exists()
+    assert not (pkg / "catalog.py").exists()
+    assert not (pkg / "pipelines").exists()
+
+
 def test_init_refuses_overwrite_without_force(tmp_path):
     fake_uv_project(tmp_path)
     scaffold.init(tmp_path)

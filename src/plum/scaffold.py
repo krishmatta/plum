@@ -17,14 +17,29 @@ def init(project: Path | str | None = None, *, force: bool = False) -> str:
     Expects a uv-style project (`uv init --package <name>`): a single package
     under `src/` and a `pyproject.toml`. Renders the templates into that package
     and points its console script at the app. Does not invoke uv.
+
+    Every precondition is checked before anything is written, so a project in a
+    bad state fails without leaving a half-written scaffold behind.
     """
     project = Path(project) if project is not None else Path.cwd()
-    pkg_dir = _find_package(project)
-    if not force and (pkg_dir / "app.py").exists():
-        raise ScaffoldError(f"{pkg_dir / 'app.py'} already exists; pass --force to overwrite")
+    pkg_dir = _preflight(project, force=force)
     _render_templates(pkg_dir, pkg_dir.name)
     _repoint_script(project / "pyproject.toml", pkg_dir.name)
     return pkg_dir.name
+
+
+def _preflight(project: Path, *, force: bool) -> Path:
+    """Validate the whole operation up front; raise before any write. Returns the package dir."""
+    pkg_dir = _find_package(project)
+    pyproject = project / "pyproject.toml"
+    if not pyproject.is_file():
+        raise ScaffoldError(
+            f"no pyproject.toml under {project}; run `uv init --package <name>` first"
+        )
+    if not force and (pkg_dir / "app.py").exists():
+        raise ScaffoldError(f"{pkg_dir / 'app.py'} already exists; pass --force to overwrite")
+    _assert_script_present(pyproject.read_text(encoding="utf-8"), pkg_dir.name)
+    return pkg_dir
 
 
 def _find_package(project: Path) -> Path:
@@ -38,6 +53,15 @@ def _find_package(project: Path) -> Path:
         found = ", ".join(sorted(p.name for p in packages)) or "(none)"
         raise ScaffoldError(f"expected exactly one package under {src}; found: {found}")
     return packages[0]
+
+
+def _assert_script_present(pyproject_text: str, package: str) -> None:
+    if f'"{package}.app:app"' in pyproject_text or f'"{package}:main"' in pyproject_text:
+        return
+    raise ScaffoldError(
+        f"could not find a console-script entry for '{package}' in pyproject.toml; "
+        f'set [project.scripts] {package} = "{package}.app:app" manually'
+    )
 
 
 def _render_templates(dest: Path, package: str) -> None:
