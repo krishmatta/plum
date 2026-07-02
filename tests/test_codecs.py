@@ -3,6 +3,8 @@ import pytest
 from pydantic import BaseModel
 
 from plum import (
+    Codec,
+    JsonlCodec,
     JsonModelCodec,
     ParquetCodec,
     TorchListCodec,
@@ -61,6 +63,27 @@ def test_infer_arrow_schema():
     assert schema.field("tags").type == pa.list_(pa.string())
     assert pa.types.is_struct(schema.field("point").type)
     assert schema.field("note").type == pa.string()
+
+
+def test_jsonl_codec_roundtrip(tmp_path):
+    codec = JsonlCodec(Point)
+    path = tmp_path / "pts.jsonl"
+    pts = [Point(x=1, y=2), Point(x=3, y=4)]
+    codec.write(pts, path)
+    assert codec.read(path) == pts
+    assert path.read_text().count("\n") == 2
+
+
+def test_jsonl_codec_empty_list(tmp_path):
+    codec = JsonlCodec(Point)
+    path = tmp_path / "empty.jsonl"
+    codec.write([], path)
+    assert codec.read(path) == []
+
+
+def test_codecs_satisfy_protocol():
+    for codec in (JsonModelCodec(Point), JsonlCodec(Point), ParquetCodec(Point), TorchListCodec(Point)):
+        assert isinstance(codec, Codec)
 
 
 def test_infer_arrow_schema_nullability():

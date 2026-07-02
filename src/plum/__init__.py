@@ -1,5 +1,6 @@
 from plum.codecs import (
     Codec,
+    JsonlCodec,
     JsonModelCodec,
     ParquetCodec,
     TorchListCodec,
@@ -19,6 +20,7 @@ __all__ = [
     "Codec",
     "DuplicateRegistration",
     "JsonModelCodec",
+    "JsonlCodec",
     "Params",
     "ParquetCodec",
     "PlumError",
