@@ -75,6 +75,22 @@ def test_jsonl_codec_roundtrip(tmp_path):
     assert path.read_text().count("\n") == 2
 
 
+def test_json_codecs_non_ascii_roundtrip(tmp_path):
+    class Text(BaseModel):
+        s: str
+
+    obj = Text(s="naïve — 日本語")
+    model_codec = JsonModelCodec(Text)
+    model_path = tmp_path / "t.json"
+    model_codec.write(obj, model_path)
+    assert model_codec.read(model_path) == obj
+
+    list_codec = JsonlCodec(Text)
+    list_path = tmp_path / "t.jsonl"
+    list_codec.write([obj], list_path)
+    assert list_codec.read(list_path) == [obj]
+
+
 def test_jsonl_codec_empty_list(tmp_path):
     codec = JsonlCodec(Point)
     path = tmp_path / "empty.jsonl"

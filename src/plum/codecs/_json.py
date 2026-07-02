@@ -19,10 +19,13 @@ class JsonModelCodec(Generic[M]):
         self.model = model
 
     def write(self, obj: M, path: Path) -> None:
-        write_atomic(path, lambda p: p.write_text(obj.model_dump_json(indent=2)))
+        write_atomic(
+            path,
+            lambda p: p.write_text(obj.model_dump_json(indent=2), encoding="utf-8"),
+        )
 
     def read(self, path: Path) -> M:
-        return self.model.model_validate_json(Path(path).read_text())
+        return self.model.model_validate_json(Path(path).read_text(encoding="utf-8"))
 
 
 class JsonlCodec(Generic[M]):
@@ -35,7 +38,7 @@ class JsonlCodec(Generic[M]):
 
     def write(self, objs: list[M], path: Path) -> None:
         def _write(p: Path) -> None:
-            with p.open("w") as f:
+            with p.open("w", encoding="utf-8") as f:
                 for obj in objs:
                     f.write(obj.model_dump_json())
                     f.write("\n")
@@ -43,5 +46,5 @@ class JsonlCodec(Generic[M]):
         write_atomic(path, _write)
 
     def read(self, path: Path) -> list[M]:
-        with Path(path).open() as f:
+        with Path(path).open(encoding="utf-8") as f:
             return [self.model.model_validate_json(line) for line in f if line.strip()]

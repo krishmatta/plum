@@ -98,4 +98,4 @@ def test_iter_len_contains_names():
     assert len(reg) == 2
     assert "a" in reg
     assert reg.names() == ["a", "b"]
-    assert {w.id for w in reg} == {"a", "b"}
+    assert list(reg) == ["a", "b"]

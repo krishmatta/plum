@@ -46,7 +46,7 @@ class Registry(Generic[T]):
         if not isinstance(key, str):
             raise TypeError(
                 f"{self.kind} registry key must be a str; got {type(key).__name__} "
-                f"from attribute '{self.key}' (define it as a class attribute, not a property)"
+                f"from attribute '{self.key}'"
             )
         if key in self._items:
             raise DuplicateRegistration(self.kind, key)
@@ -67,8 +67,8 @@ class Registry(Generic[T]):
     def __contains__(self, name: object) -> bool:
         return name in self._items
 
-    def __iter__(self) -> Iterator[T]:
-        return iter(self._items.values())
+    def __iter__(self) -> Iterator[str]:
+        return iter(self.names())
 
     def __len__(self) -> int:
         return len(self._items)
