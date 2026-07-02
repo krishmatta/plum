@@ -1,5 +1,6 @@
 from plum.catalog import Artifact, Catalog, Store
 from plum.checkpoint import Shards
+from plum.cli import build_cli
 from plum.codecs import (
     Codec,
     JsonlCodec,
@@ -13,6 +14,7 @@ from plum.codecs import (
 from plum.config import Params, parse_kw
 from plum.errors import (
     DuplicateRegistration,
+    ParamsMismatch,
     PlumError,
     PriorRunFailed,
     UnknownArtifact,
@@ -20,6 +22,7 @@ from plum.errors import (
 )
 from plum.pipeline import Pipeline, RunContext, RunManifest, load_manifest
 from plum.registry import Registry
+from plum.sources import Source, autodiscover
 
 __all__ = [
     "Artifact",
@@ -29,6 +32,7 @@ __all__ = [
     "JsonModelCodec",
     "JsonlCodec",
     "Params",
+    "ParamsMismatch",
     "ParquetCodec",
     "Pipeline",
     "PlumError",
@@ -38,10 +42,13 @@ __all__ = [
     "RunContext",
     "RunManifest",
     "Shards",
+    "Source",
     "Store",
     "TorchListCodec",
     "UnknownArtifact",
     "UnknownName",
+    "autodiscover",
+    "build_cli",
     "infer_arrow_schema",
     "load_manifest",
     "parse_kw",
