@@ -1,7 +1,7 @@
 [project]
-name = "plum"
+name = "data-plum"
 version = "0.1.0"
-description = "A small library for research pipelines with git-pinned, reproducible runs."
+description = "A data plumbing library for research pipelines"
 readme = "README.md"
 authors = [
     { name = "Krish Matta", email = "self@krishmatta.net" }
@@ -9,30 +9,11 @@ authors = [
 requires-python = ">=3.10"
 license = "MIT"
 license-files = ["LICENSE"]
-keywords = ["pipeline", "research", "reproducibility", "provenance", "experiment", "data"]
-classifiers = [
-    "Development Status :: 3 - Alpha",
-    "Intended Audience :: Developers",
-    "Intended Audience :: Science/Research",
-    "Operating System :: OS Independent",
-    "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.10",
-    "Programming Language :: Python :: 3.11",
-    "Programming Language :: Python :: 3.12",
-    "Programming Language :: Python :: 3.13",
-    "Topic :: Scientific/Engineering",
-    "Typing :: Typed",
-]
 dependencies = [
     "click>=8.4.2",
     "pydantic>=2",
     "typer>=0.19",
 ]
-
-[project.urls]
-Homepage = "https://github.com/krishmatta/plum"
-Repository = "https://github.com/krishmatta/plum"
-Issues = "https://github.com/krishmatta/plum/issues"
 
 [project.optional-dependencies]
 parquet = ["pyarrow>=17"]
@@ -44,6 +25,9 @@ plum = "plum.__main__:app"
 [build-system]
 requires = ["uv_build>=0.9.9,<0.10.0"]
 build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-name = "plum"
 
 [dependency-groups]
 dev = [
