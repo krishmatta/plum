@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Optional
 
 import typer
@@ -10,6 +11,35 @@ from plum.config import parse_kw
 from plum.errors import PlumError
 from plum.pipeline import Pipeline
 from plum.registry import Registry
+
+
+def _fmt_ts(iso: str | None) -> str:
+    if not iso:
+        return "-"
+    try:
+        return datetime.fromisoformat(iso).strftime("%Y-%m-%d %H:%M:%S")
+    except ValueError:
+        return iso
+
+
+def _fmt_duration(started: str | None, finished: str | None) -> str:
+    if not started or not finished:
+        return "-"
+    try:
+        secs = int((datetime.fromisoformat(finished) - datetime.fromisoformat(started)).total_seconds())
+    except ValueError:
+        return "-"
+    if secs < 60:
+        return f"{secs}s"
+    if secs < 3600:
+        return f"{secs // 60}m{secs % 60}s"
+    return f"{secs // 3600}h{(secs % 3600) // 60}m"
+
+
+def _print_table(headers: list[str], rows: list[list[str]]) -> None:
+    widths = [max(len(cell) for cell in col) for col in zip(*([headers] + rows))]
+    for row in [headers, *rows]:
+        typer.echo("  ".join(cell.ljust(widths[i]) for i, cell in enumerate(row)).rstrip())
 
 
 def build_cli(
@@ -77,8 +107,45 @@ def build_cli(
             typer.echo(str(e), err=True)
             raise typer.Exit(1)
         pipe = pipeline_cls(Store(catalog, data_root))
-        for run_id in pipe.list_runs(scope):
-            typer.echo(run_id)
+        run_ids = pipe.list_runs(scope)
+        if not run_ids:
+            typer.echo("no runs")
+            return
+        rows = []
+        for run_id in run_ids:
+            m = pipe.manifest(run_id, scope=scope)
+            if m is None:
+                rows.append([run_id, "(no manifest)", "-", "-", "-"])
+            else:
+                rows.append(
+                    [
+                        run_id,
+                        m.status,
+                        _fmt_ts(m.started_at),
+                        _fmt_ts(m.finished_at),
+                        _fmt_duration(m.started_at, m.finished_at),
+                    ]
+                )
+        _print_table(["RUN ID", "STATUS", "STARTED", "FINISHED", "DURATION"], rows)
+
+    @app.command()
+    def show(
+        pipeline: str,
+        run_id: str,
+        scope: Optional[str] = typer.Argument(None),
+        data_root: str = typer.Option(data_root_default, "--data-root"),
+    ) -> None:
+        try:
+            pipeline_cls = pipelines.get(pipeline)
+        except PlumError as e:
+            typer.echo(str(e), err=True)
+            raise typer.Exit(1)
+        pipe = pipeline_cls(Store(catalog, data_root))
+        m = pipe.manifest(run_id, scope=scope)
+        if m is None:
+            typer.echo(f"no manifest for run '{run_id}'", err=True)
+            raise typer.Exit(1)
+        typer.echo(m.model_dump_json(indent=2))
 
     for family, registry in (sources or {}).items():
         app.add_typer(_source_app(registry), name=family)
