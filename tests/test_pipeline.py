@@ -181,6 +181,28 @@ def test_scratch_writes_file(tmp_path):
     assert (store.run_dir("thing", None, "r1") / "side.jsonl").exists()
 
 
+class Sharded(Pipeline):
+    name = "sharded"
+    produces = "scratchable"
+
+    class Params(Pipeline.Params):
+        pass
+
+    def _run(self, ctx):
+        items = [Payload(value=i) for i in range(5)]
+        shards = ctx.shards(len(items), 2, JsonlCodec(Payload))
+        for idx, sl in shards.pending:
+            shards.write(idx, items[sl])
+        shards.finalize(ctx.output_path())
+
+
+def test_sharded_pipeline_finalizes_to_output_path(tmp_path):
+    store = build_store(tmp_path)
+    pipe = Sharded(store)
+    pipe.run("r1")
+    assert store.read("scratchable", None, "r1") == [Payload(value=i) for i in range(5)]
+
+
 class Scoped(Pipeline):
     name = "scoped"
     produces = "thing"

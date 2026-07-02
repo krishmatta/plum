@@ -44,7 +44,17 @@ def load_manifest(path: Path | str) -> RunManifest:
 
 
 class RunContext:
-    """Handed to `_run`. Owns the run directory and its outputs."""
+    """Handed to `_run`. Owns the run directory and its outputs.
+
+    - `ctx.params` -> the pipeline's validated `Params` instance.
+    - `ctx.path(name)` -> a path inside the run directory.
+    - `ctx.read(artifact, scope, run_id)` -> an upstream artifact.
+    - `ctx.output(obj)` / `ctx.output_path()` -> write / locate the `produces` artifact.
+    - `ctx.scratch(name, obj, codec)` -> uncataloged inspectable intermediate.
+    - `ctx.shards(...)` -> resumable sharded output, so expensive interruptible
+      work restarts at the last shard instead of from scratch (see `Shards`).
+    - `ctx.stats[...]` -> anything worth recording in the manifest.
+    """
 
     def __init__(
         self,
@@ -74,6 +84,9 @@ class RunContext:
 
     def output(self, obj: Any) -> Path:
         return self.store.write(self._produces, self._scope, self.run_id, obj)
+
+    def output_path(self) -> Path:
+        return self.store.path(self._produces, self._scope, self.run_id)
 
     def scratch(self, name: str, obj: Any, codec: Codec) -> Path:
         path = self.run_dir / f"{name}{codec.extension}"

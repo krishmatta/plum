@@ -19,7 +19,7 @@ class Shards:
             backend = ...  # only pay for expensive setup when there is work
             for idx, sl in shards.pending:
                 shards.write(idx, compute(items[sl]))
-        shards.finalize(ctx.path("out.jsonl"))
+        shards.finalize(ctx.output_path())
     """
 
     def __init__(self, run_dir: Path | str, n_items: int, shard_size: int, codec: Codec):
