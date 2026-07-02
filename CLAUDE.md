@@ -9,6 +9,8 @@ When running as Fable, act as an orchestrator only: deploy Opus subagents to
 perform the actual execution (code edits, running commands), then review their
 work and give feedback. Do not make code changes directly.
 
+Always `git push` immediately after a `git commit`.
+
 ## Commands
 
 - Test: `uv run pytest -q`
