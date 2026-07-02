@@ -5,7 +5,7 @@ import shutil
 import traceback
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, ClassVar
+from typing import Any, ClassVar, final
 
 from pydantic import BaseModel, Field
 
@@ -90,6 +90,9 @@ class Pipeline(abc.ABC):
     and writes manifest.json. Re-running an existing run id is cheap and safe:
     completed runs are skipped, interrupted runs resume in place, and
     `force=True` starts over from scratch.
+
+    Subclass contract: set `name` and `produces`, define a `Params` model, and
+    implement `_run(ctx)`; override `scope()` to group runs (default is flat).
     """
 
     name: ClassVar[str]
@@ -102,16 +105,14 @@ class Pipeline(abc.ABC):
         self.store = store
 
     def scope(self, params: BaseModel) -> str | None:
+        """Override point: the path segment grouping runs, between artifact dir and run id."""
         return None
 
-    def list_runs(self, scope: str | None) -> list[str]:
-        runs_dir = self.store.data_root.joinpath(
-            *[s for s in (self.produces, scope) if s]
-        )
-        if not runs_dir.exists():
-            return []
-        return sorted(p.name for p in runs_dir.iterdir() if p.is_dir())
+    @abc.abstractmethod
+    def _run(self, ctx: RunContext) -> None:
+        raise NotImplementedError
 
+    @final
     def run(self, run_id: str, *, force: bool = False, **params) -> RunManifest:
         if not run_id:
             raise ValueError("run_id is required")
@@ -157,9 +158,14 @@ class Pipeline(abc.ABC):
             self._write_manifest(run_dir, manifest)
         return manifest
 
-    @abc.abstractmethod
-    def _run(self, ctx: RunContext) -> None:
-        raise NotImplementedError
+    @final
+    def list_runs(self, scope: str | None) -> list[str]:
+        runs_dir = self.store.data_root.joinpath(
+            *[s for s in (self.produces, scope) if s]
+        )
+        if not runs_dir.exists():
+            return []
+        return sorted(p.name for p in runs_dir.iterdir() if p.is_dir())
 
     @staticmethod
     def _write_manifest(run_dir: Path, manifest: RunManifest) -> None:
