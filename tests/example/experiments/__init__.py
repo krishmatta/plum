@@ -1,0 +1,2 @@
+# Deliberately empty: autodiscover imports the modules in this package, which
+# registers each Experiment.

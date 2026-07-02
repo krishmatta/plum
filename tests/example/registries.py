@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from plum import Pipeline, Registry
+from plum import Experiment, Pipeline, Registry
 
 from tests.example.methods.base import Method
 
@@ -8,3 +8,5 @@ from tests.example.methods.base import Method
 PIPELINES: Registry[type[Pipeline]] = Registry("pipeline", key="name")
 # Sources key on `id` (the Registry default).
 METHODS: Registry[type[Method]] = Registry("method")
+# Experiments key on `id`; the CLI's `experiments run <id>` looks them up here.
+EXPERIMENTS: Registry[type[Experiment]] = Registry("experiment")

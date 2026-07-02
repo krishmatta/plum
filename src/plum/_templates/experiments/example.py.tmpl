@@ -1,0 +1,15 @@
+from __future__ import annotations
+
+from plum import Experiment, sweep
+
+from ..registries import EXPERIMENTS
+
+
+@EXPERIMENTS.register
+class Demo(Experiment):
+    id = "demo"
+
+    def run(self, runner):
+        # a sweep: one run per param combo, with a run id derived from the params
+        for params, run_id in sweep({"n": [3, 5]}, run_id=lambda p: f"demo-{p['n']}"):
+            runner.run("load", run_id, n=params["n"], description=f"demo n={params['n']}")

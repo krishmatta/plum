@@ -2,14 +2,15 @@ from __future__ import annotations
 
 from plum import autodiscover, build_cli
 
-from . import pipelines
+from . import experiments, pipelines
 from .catalog import CATALOG
-from .registries import PIPELINES
+from .registries import EXPERIMENTS, PIPELINES
 
-# imports every module in pipelines/, running their registration decorators
+# imports every module in pipelines/ and experiments/, running their registrations
 autodiscover(pipelines)
+autodiscover(experiments)
 
-app = build_cli(catalog=CATALOG, pipelines=PIPELINES)
+app = build_cli(catalog=CATALOG, pipelines=PIPELINES, experiments=EXPERIMENTS)
 
 if __name__ == "__main__":
     app()

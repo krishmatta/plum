@@ -11,6 +11,7 @@ from pydantic import ValidationError
 from plum.catalog import Catalog, Store
 from plum.config import parse_kw
 from plum.errors import PlumError
+from plum.experiment import Runner
 from plum.pipeline import Pipeline
 from plum.registry import Registry
 
@@ -78,6 +79,7 @@ def build_cli(
     catalog: Catalog,
     pipelines: Registry[type[Pipeline]],
     sources: dict[str, Registry] | None = None,
+    experiments: Registry | None = None,
     data_root_default: str = "data",
 ) -> typer.Typer:
     """The whole generic CLI over a project's registries: run, pipelines
@@ -192,7 +194,40 @@ def build_cli(
     for family, registry in (sources or {}).items():
         app.add_typer(_source_app(registry), name=family)
 
+    if experiments is not None:
+        app.add_typer(
+            _experiments_app(experiments, catalog, pipelines, data_root_default),
+            name="experiments",
+        )
+
     return app
+
+
+def _experiments_app(
+    experiments: Registry, catalog: Catalog, pipelines: Registry, data_root_default: str
+) -> typer.Typer:
+    sub = typer.Typer(no_args_is_help=True)
+
+    @sub.command("list")
+    def experiments_list() -> None:
+        for experiment_id in experiments.names():
+            typer.echo(experiment_id)
+
+    @sub.command("run")
+    def experiments_run(
+        experiment: str,
+        data_root: str = typer.Option(data_root_default, "--data-root"),
+    ) -> None:
+        try:
+            experiment_cls = experiments.get(experiment)
+            runner = Runner(pipelines, Store(catalog, data_root))
+            experiment_cls().run(runner)
+        except (PlumError, ValidationError, ValueError) as e:
+            typer.echo(str(e), err=True)
+            raise typer.Exit(1)
+        typer.echo(f"experiment '{experiment}': done")
+
+    return sub
 
 
 def _source_app(registry: Registry) -> typer.Typer:

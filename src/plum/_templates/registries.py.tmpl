@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from plum import Pipeline, Registry
+from plum import Experiment, Pipeline, Registry
 
 # Pipelines key on their `name` class attr; the CLI's `run <name>` looks them up here.
 PIPELINES: Registry[type[Pipeline]] = Registry("pipeline", key="name")
+# Experiments key on `id`; the CLI's `experiments run <id>` looks them up here.
+EXPERIMENTS: Registry[type[Experiment]] = Registry("experiment")
