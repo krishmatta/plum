@@ -79,7 +79,7 @@ class Cube(Method):
 Pipelines. `Apply` reads a `load` run by id and checkpoints every 4 items:
 
 ```python
-# myproj/pipelines.py
+# myproj/pipelines/example.py
 @PIPELINES.register
 class Load(Pipeline):
     name = "load"
@@ -128,10 +128,11 @@ Wiring:
 ```python
 # myproj/app.py
 import myproj.methods
-import myproj.pipelines  # importing runs the @PIPELINES.register decorators
+import myproj.pipelines
 from plum import autodiscover, build_cli
 
-# imports every module in methods/, which registers the sources
+# imports every module in pipelines/ and methods/, running their registrations
+autodiscover(myproj.pipelines)
 autodiscover(myproj.methods)
 
 # sources= adds a `methods list` subcommand
@@ -202,4 +203,25 @@ lazily behind extras:
 ```console
 $ pip install plum[parquet]   # pyarrow
 $ pip install plum[torch]     # torch
+```
+
+## Starting a new project
+
+plum defers project creation to uv, then scaffolds its own files into the
+project. From an empty directory:
+
+```console
+$ uv init --package myproj
+$ cd myproj
+$ uv add "plum @ git+https://github.com/krishmatta/plum"
+$ uv run plum init
+```
+
+`plum init` renders `catalog.py`, `registries.py`, `schema.py`, a `pipelines/`
+package with a starter pipeline, and `app.py` into `src/myproj/`, and points the
+project's console script at the app. Then run it:
+
+```console
+$ uv run myproj run load r1 n=5
+$ uv run myproj runs load
 ```

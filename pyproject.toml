@@ -16,6 +16,9 @@ dependencies = [
 parquet = ["pyarrow>=17"]
 torch = ["torch>=2"]
 
+[project.scripts]
+plum = "plum.__main__:app"
+
 [build-system]
 requires = ["uv_build>=0.9.9,<0.10.0"]
 build-backend = "uv_build"

@@ -1,0 +1,10 @@
+from __future__ import annotations
+
+from plum import Artifact, Catalog, JsonModelCodec
+
+from .schema import Numbers
+
+# Every on-disk output is declared here once. Pipelines, the store, and the CLI
+# resolve artifact names through this catalog.
+CATALOG = Catalog()
+CATALOG.register(Artifact("numbers", JsonModelCodec(Numbers)))

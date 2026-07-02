@@ -3,11 +3,12 @@ from __future__ import annotations
 from plum import autodiscover, build_cli
 
 import tests.example.methods
-import tests.example.pipelines  # noqa: F401; importing runs the @PIPELINES.register decorators
+import tests.example.pipelines
 from tests.example.catalog import CATALOG
 from tests.example.registries import METHODS, PIPELINES
 
-# imports every module in methods/, which registers the sources
+# imports every module in pipelines/ and methods/, running their registration decorators
+autodiscover(tests.example.pipelines)
 autodiscover(tests.example.methods)
 
 # sources= adds a `methods list` subcommand
