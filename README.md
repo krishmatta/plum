@@ -83,6 +83,7 @@ Pipelines. `Apply` reads a `load` run by id and checkpoints every 4 items:
 @PIPELINES.register
 class Load(Pipeline):
     name = "load"
+    # the catalog artifact this pipeline writes; also its dir under data/
     produces = "numbers"
 
     class Params(Pipeline.Params):
@@ -90,7 +91,8 @@ class Load(Pipeline):
 
     def _run(self, ctx):
         values = list(range(ctx.params.n))
-        ctx.stats["count"] = len(values)          # recorded in the manifest
+        ctx.stats["count"] = len(values)  # recorded in this run's manifest.json
+        # encoded by the artifact's codec into the run dir
         ctx.output(Numbers(values=values))
 
 
@@ -100,19 +102,23 @@ class Apply(Pipeline):
     produces = "powers"
 
     class Params(Pipeline.Params):
-        numbers_run: str          # which load run to read
+        numbers_run: str
         method: str = "square"
 
     def scope(self, params):
-        return params.method      # runs grouped on disk: powers/<method>/<run_id>/
+        return params.method  # extra path segment: data/powers/<method>/<run_id>/
 
     def _run(self, ctx):
-        xs = ctx.read("numbers", None, ctx.params.numbers_run).values  # None: load is unscoped
+        # upstream artifact by run id; scope None because load runs are unscoped
+        xs = ctx.read("numbers", None, ctx.params.numbers_run).values
+        # checkpoint every 4 items; a rerun recomputes only missing shards
         shards = ctx.shards(len(xs), shard_size=4, codec=JsonlCodec(Power))
-        if shards.pending:
-            method = METHODS.get(ctx.params.method)()  # stand-in for expensive setup
+        if shards.pending:  # empty on a resumed finished run, so setup is skipped
+            # sources are looked up by name at run time; stand-in for expensive setup
+            method = METHODS.get(ctx.params.method)()
             for idx, sl in shards.pending:
                 shards.write(idx, [Power(x=x, y=method.apply(x)) for x in xs[sl]])
+        # concatenate the shards into the powers artifact at its catalog path
         shards.finalize(ctx.output_path())
         ctx.stats["count"] = len(xs)
 ```
@@ -122,11 +128,13 @@ Wiring:
 ```python
 # myproj/app.py
 import myproj.methods
-import myproj.pipelines            # registers the pipelines
+import myproj.pipelines  # importing runs the @PIPELINES.register decorators
 from plum import autodiscover, build_cli
 
+# imports every module in methods/, which registers the sources
 autodiscover(myproj.methods)
 
+# sources= adds a `methods list` subcommand
 app = build_cli(catalog=CATALOG, pipelines=PIPELINES, sources={"methods": METHODS})
 ```
 

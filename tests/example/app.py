@@ -12,3 +12,6 @@ autodiscover(tests.example.methods)
 
 # sources= adds a `methods list` subcommand
 app = build_cli(catalog=CATALOG, pipelines=PIPELINES, sources={"methods": METHODS})
+
+if __name__ == "__main__":
+    app()
