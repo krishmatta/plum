@@ -3,23 +3,7 @@ from __future__ import annotations
 from plum import JsonlCodec, Pipeline
 
 from tests.example.registries import METHODS, PIPELINES
-from tests.example.schema import Numbers, Power
-
-
-@PIPELINES.register
-class Load(Pipeline):
-    name = "load"
-    # the catalog artifact this pipeline writes; also its dir under data/
-    produces = "numbers"
-
-    class Params(Pipeline.Params):
-        n: int = 10
-
-    def _run(self, ctx):
-        values = list(range(ctx.params.n))
-        ctx.stats["count"] = len(values)  # recorded in this run's manifest.json
-        # encoded by the artifact's codec into the run dir
-        ctx.output(Numbers(values=values))
+from tests.example.schema import Power
 
 
 @PIPELINES.register

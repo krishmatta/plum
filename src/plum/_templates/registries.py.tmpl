@@ -1,0 +1,6 @@
+from __future__ import annotations
+
+from plum import Pipeline, Registry
+
+# Pipelines key on their `name` class attr; the CLI's `run <name>` looks them up here.
+PIPELINES: Registry[type[Pipeline]] = Registry("pipeline", key="name")
