@@ -27,6 +27,7 @@ def test_render_templates_strips_tmpl_suffix(tmp_path):
     assert (tmp_path / "app.py").exists()
     assert (tmp_path / "catalog.py").exists()
     assert (tmp_path / "pipelines" / "example.py").exists()
+    assert (tmp_path / "experiments" / "example.py").exists()
     assert not list(tmp_path.rglob("*.tmpl"))
 
 
