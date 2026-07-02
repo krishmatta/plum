@@ -12,7 +12,7 @@ from pydantic import BaseModel, Field
 from plum.catalog import Store
 from plum.checkpoint import Shards
 from plum.codecs import Codec, write_atomic
-from plum.errors import PriorRunFailed
+from plum.errors import ParamsMismatch, PriorRunFailed
 
 import plum.config
 
@@ -144,6 +144,11 @@ class Pipeline(abc.ABC):
                 manifest_path = run_dir / MANIFEST_FILE
                 if manifest_path.exists():
                     existing = load_manifest(manifest_path)
+                    requested = p.model_dump(mode="json")
+                    if existing.params != requested:
+                        raise ParamsMismatch(
+                            self.name, run_id, existing.params, requested
+                        )
                     if existing.status == "ok":
                         return existing  # already done; rerunning is a no-op
                     if existing.status == "error" and not resume:

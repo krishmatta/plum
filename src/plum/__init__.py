@@ -14,6 +14,7 @@ from plum.codecs import (
 from plum.config import Params, parse_kw
 from plum.errors import (
     DuplicateRegistration,
+    ParamsMismatch,
     PlumError,
     PriorRunFailed,
     UnknownArtifact,
@@ -31,6 +32,7 @@ __all__ = [
     "JsonModelCodec",
     "JsonlCodec",
     "Params",
+    "ParamsMismatch",
     "ParquetCodec",
     "Pipeline",
     "PlumError",

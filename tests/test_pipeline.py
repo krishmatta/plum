@@ -8,6 +8,7 @@ from plum import (
     Catalog,
     JsonModelCodec,
     JsonlCodec,
+    ParamsMismatch,
     Pipeline,
     PriorRunFailed,
     Store,
@@ -73,13 +74,79 @@ def test_force_reexecutes(tmp_path):
     assert store.read("thing", "r1") == Payload(value=9)
 
 
+def test_rerun_with_different_params_raises(tmp_path):
+    store = build_store(tmp_path)
+    pipe = Thing(store)
+    pipe.run("r1", value=3)
+    with pytest.raises(ParamsMismatch) as exc:
+        pipe.run("r1", value=4)
+    assert pipe.calls == 1
+    assert "value" in str(exc.value)
+
+
+def test_resume_after_failure_with_different_params_raises(tmp_path):
+    store = build_store(tmp_path)
+    pipe = Thing(store)
+    run_dir = store.run_dir("thing", "r1")
+    run_dir.mkdir(parents=True)
+    (run_dir / "manifest.json").write_text(
+        json.dumps(
+            {
+                "pipeline": "thing",
+                "run_id": "r1",
+                "status": "error",
+                "params": {"value": 3},
+            }
+        )
+    )
+    with pytest.raises(ParamsMismatch):
+        pipe.run("r1", value=4, resume=True)
+    assert pipe.calls == 0
+
+
+def test_force_with_different_params_reexecutes(tmp_path):
+    store = build_store(tmp_path)
+    pipe = Thing(store)
+    pipe.run("r1", value=3)
+    pipe.run("r1", value=4, force=True)
+    assert pipe.calls == 2
+    assert store.read("thing", "r1") == Payload(value=4)
+
+
+def test_interrupted_run_with_different_params_raises(tmp_path):
+    store = build_store(tmp_path)
+    pipe = Thing(store)
+    run_dir = store.run_dir("thing", "r1")
+    run_dir.mkdir(parents=True)
+    (run_dir / "manifest.json").write_text(
+        json.dumps(
+            {
+                "pipeline": "thing",
+                "run_id": "r1",
+                "status": "running",
+                "params": {"value": 5},
+            }
+        )
+    )
+    with pytest.raises(ParamsMismatch):
+        pipe.run("r1", value=6)
+    assert pipe.calls == 0
+
+
 def test_interrupted_run_resumes(tmp_path):
     store = build_store(tmp_path)
     pipe = Thing(store)
     run_dir = store.run_dir("thing", "r1")
     run_dir.mkdir(parents=True)
     (run_dir / "manifest.json").write_text(
-        json.dumps({"pipeline": "thing", "run_id": "r1", "status": "running"})
+        json.dumps(
+            {
+                "pipeline": "thing",
+                "run_id": "r1",
+                "status": "running",
+                "params": {"value": 5},
+            }
+        )
     )
     pipe.run("r1", value=5)
     assert pipe.calls == 1

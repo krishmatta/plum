@@ -26,6 +26,31 @@ class UnknownArtifact(UnknownName):
         super().__init__("artifact", name, known)
 
 
+class ParamsMismatch(PlumError):
+    def __init__(
+        self, pipeline: str, run_id: str, stored: dict, requested: dict
+    ) -> None:
+        self.pipeline = pipeline
+        self.run_id = run_id
+        self.stored = stored
+        self.requested = requested
+        missing = object()
+
+        def show(v: object) -> str:
+            return "(absent)" if v is missing else repr(v)
+
+        diffs = [
+            f"{k}: stored={show(stored.get(k, missing))} requested={show(requested.get(k, missing))}"
+            for k in sorted(set(stored) | set(requested))
+            if stored.get(k, missing) != requested.get(k, missing)
+        ]
+        super().__init__(
+            f"{pipeline} run '{run_id}' was computed with different params ("
+            + "; ".join(diffs)
+            + "); pass force=True to start over"
+        )
+
+
 class PriorRunFailed(PlumError):
     def __init__(self, pipeline: str, run_id: str, error: str | None) -> None:
         self.pipeline = pipeline

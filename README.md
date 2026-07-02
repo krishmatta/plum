@@ -188,6 +188,10 @@ data/
   `--resume` to continue from checkpoints or `--force` to start over. A
   failing body always leaves a manifest with the full traceback.
 
+Params are part of the identity check: rerunning or resuming a run id with
+different params raises `ParamsMismatch` rather than silently reusing prior
+work. Use `--force` to recompute from scratch.
+
 Every write is atomic, so whatever a crashed run left behind is complete.
 
 ## Install
