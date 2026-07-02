@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import sys
 from datetime import datetime
 from typing import Optional
 
+import click
 import typer
 from pydantic import ValidationError
 
@@ -36,6 +38,35 @@ def _fmt_duration(started: str | None, finished: str | None) -> str:
     return f"{secs // 3600}h{(secs % 3600) // 60}m"
 
 
+def _gather_description(
+    pipeline: str, run_id: str, params: dict, message: str | None
+) -> str | None:
+    """The run message. -m wins; at a terminal an empty -m opens $EDITOR and an
+    empty result aborts (git-style); non-interactively it's optional."""
+    if message is not None:
+        described = message.strip()
+        if not described:
+            raise ValueError("empty run description; write a non-empty -m message")
+        return described
+    if not sys.stdin.isatty():
+        return None  # scripts/CI pass -m (or a programmatic description); don't block
+    template = (
+        "\n"
+        f"# Describe run '{run_id}' of pipeline '{pipeline}'.\n"
+        "# Lines starting with '#' are ignored; an empty message aborts the run.\n"
+        f"# params: {params}\n"
+    )
+    edited = click.edit(template)
+    if edited is None:
+        raise ValueError("aborted: no run description written")
+    described = "\n".join(
+        line for line in edited.splitlines() if not line.startswith("#")
+    ).strip()
+    if not described:
+        raise ValueError("aborted: empty run description")
+    return described
+
+
 def _print_table(headers: list[str], rows: list[list[str]]) -> None:
     widths = [max(len(cell) for cell in col) for col in zip(*([headers] + rows))]
     for row in [headers, *rows]:
@@ -58,6 +89,9 @@ def build_cli(
         pipeline: str,
         run_id: str,
         param: list[str] = typer.Argument(None, help="Params as key=value (values may be JSON)"),
+        message: Optional[str] = typer.Option(
+            None, "-m", "--message", help="Run description; opens $EDITOR if omitted at a terminal"
+        ),
         force: bool = typer.Option(False, "--force"),
         resume: bool = typer.Option(False, "--resume"),
         data_root: str = typer.Option(data_root_default, "--data-root"),
@@ -67,9 +101,17 @@ def build_cli(
             store = Store(catalog, data_root)
             pipe = pipeline_cls(store)
             kw = parse_kw(param)
-            manifest = pipe.run(run_id, force=force, resume=resume, **kw)
-            out = store.path(pipe.produces, run_id, scope=pipe.scope(pipe.Params(**kw)))
-        except (PlumError, ValidationError) as e:
+            scope = pipe.scope(pipe.Params(**kw))
+            # Only ask for a description when creating a new (or forced) run, so
+            # cached reruns don't re-prompt.
+            description = None
+            if force or pipe.manifest(run_id, scope=scope) is None:
+                description = _gather_description(pipeline, run_id, kw, message)
+            manifest = pipe.run(
+                run_id, force=force, resume=resume, description=description, **kw
+            )
+            out = store.path(pipe.produces, run_id, scope=scope)
+        except (PlumError, ValidationError, ValueError) as e:
             typer.echo(str(e), err=True)
             raise typer.Exit(1)
         typer.echo(f"{pipeline} run '{run_id}': {manifest.status}")
