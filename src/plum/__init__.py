@@ -22,12 +22,11 @@ from plum.errors import (
     UnknownName,
 )
 from plum.pipeline import (
-    Environment,
     GitInfo,
     Pipeline,
     RunContext,
     RunManifest,
-    capture_environment,
+    capture_git,
     load_manifest,
 )
 from plum.registry import Registry
@@ -38,10 +37,9 @@ __all__ = [
     "Catalog",
     "Codec",
     "DirtyWorkingTree",
-    "Environment",
     "GitInfo",
     "DuplicateRegistration",
-    "capture_environment",
+    "capture_git",
     "JsonModelCodec",
     "JsonlCodec",
     "Params",

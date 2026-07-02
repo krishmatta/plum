@@ -1,12 +1,10 @@
 from __future__ import annotations
 
 import abc
-import platform
 import shutil
 import subprocess
 import traceback
 from datetime import datetime, timezone
-from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 from typing import Any, ClassVar, final
 
@@ -31,19 +29,16 @@ class GitInfo(BaseModel):
     branch: str | None = None
 
 
-class Environment(BaseModel):
-    python: str
-    plum: str
-    git: GitInfo | None = None
-
-
 def _git(cwd: Path, *args: str) -> subprocess.CompletedProcess:
     return subprocess.run(
         ["git", "-C", str(cwd), *args], capture_output=True, text=True
     )
 
 
-def _capture_git(cwd: Path) -> GitInfo | None:
+def capture_git(cwd: Path) -> GitInfo | None:
+    """The commit a run maps to. Raise DirtyWorkingTree in a dirty repo; None
+    outside one. With a clean tree and a committed uv.lock, the sha pins the
+    exact code and dependencies, so nothing else needs recording."""
     if shutil.which("git") is None:
         return None
     if _git(cwd, "rev-parse", "--show-toplevel").returncode != 0:
@@ -58,19 +53,6 @@ def _capture_git(cwd: Path) -> GitInfo | None:
     return GitInfo(sha=head.stdout.strip(), branch=branch or None)
 
 
-def capture_environment(cwd: Path) -> Environment:
-    """Snapshot the run's environment; raise DirtyWorkingTree in a dirty repo."""
-    try:
-        plum_version = version("plum")
-    except PackageNotFoundError:
-        plum_version = "unknown"
-    return Environment(
-        python=platform.python_version(),
-        plum=plum_version,
-        git=_capture_git(cwd),
-    )
-
-
 class RunManifest(BaseModel):
     """Reproducibility record written to every run directory as manifest.json.
 
@@ -82,7 +64,7 @@ class RunManifest(BaseModel):
     status: str = "running"  # running | ok | error
     params: dict = {}
     stats: dict = {}
-    environment: Environment | None = None
+    git: GitInfo | None = None
     started_at: str = Field(default_factory=_timestamp)
     finished_at: str | None = None
     error: str | None = None
@@ -184,7 +166,7 @@ class Pipeline(abc.ABC):
         # An undeclared `produces` must fail here, not hours later at ctx.output().
         self.store.catalog.get(self.produces)
         # Refuse a dirty tree before touching disk, so every run maps to a commit.
-        environment = capture_environment(Path.cwd())
+        git = capture_git(Path.cwd())
         scope = self.scope(p)
         run_dir = self.store.run_dir(self.produces, run_id, scope=scope)
 
@@ -211,7 +193,7 @@ class Pipeline(abc.ABC):
             pipeline=self.name,
             run_id=run_id,
             params=p.model_dump(mode="json"),
-            environment=environment,
+            git=git,
         )
         self._write_manifest(run_dir, manifest)
         ctx = RunContext(

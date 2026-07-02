@@ -2,16 +2,10 @@ import shutil
 import subprocess
 
 import pytest
-
-from plum import (
-    Catalog,
-    DirtyWorkingTree,
-    Pipeline,
-    Store,
-    capture_environment,
-)
-from plum.codecs import JsonModelCodec
 from pydantic import BaseModel
+
+from plum import Artifact, Catalog, DirtyWorkingTree, Pipeline, Store
+from plum.codecs import JsonModelCodec
 
 pytestmark = pytest.mark.skipif(shutil.which("git") is None, reason="git not installed")
 
@@ -33,8 +27,6 @@ class Emit(Pipeline):
 
 def catalog() -> Catalog:
     cat = Catalog()
-    from plum import Artifact
-
     cat.register(Artifact("blob", JsonModelCodec(Blob)))
     return cat
 
@@ -57,15 +49,13 @@ def test_clean_repo_records_sha(tmp_path, monkeypatch):
     make_repo(tmp_path)
     monkeypatch.chdir(tmp_path)
     manifest = Emit(Store(catalog(), tmp_path / "data")).run("r1")
-    assert manifest.environment.git is not None
     head = subprocess.run(
         ["git", "-C", str(tmp_path), "rev-parse", "HEAD"],
         capture_output=True, text=True,
     ).stdout.strip()
-    assert manifest.environment.git.sha == head
-    assert manifest.environment.git.branch
-    assert manifest.environment.python
-    assert manifest.environment.plum
+    assert manifest.git is not None
+    assert manifest.git.sha == head
+    assert manifest.git.branch
 
 
 def test_dirty_tracked_change_refuses(tmp_path, monkeypatch):
@@ -104,5 +94,4 @@ def test_no_commits_refuses(tmp_path, monkeypatch):
 def test_non_repo_records_no_git(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)  # plain dir, not a repo
     manifest = Emit(Store(catalog(), tmp_path / "data")).run("r1")
-    assert manifest.environment.git is None
-    assert manifest.environment.python
+    assert manifest.git is None
