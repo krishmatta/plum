@@ -23,5 +23,9 @@ Built in phases; currently at the primitives stage (registry, codecs, config).
 - **Optional heavy deps (pyarrow, torch) are imported lazily inside methods**, so
   `import plum` stays cheap and works without extras. Keep it that way in new
   codecs.
+- **Escape hatches are all-or-nothing.** Options that must agree travel as one
+  object (see `RowConverter`), never as separate kwargs a caller can half-override.
+  A codec only grows customization hooks if they sit inside machinery worth
+  reusing; when the codec is trivial, "write your own codec" is the escape hatch.
 - All file writes go through `write_atomic`.
 - Errors that reject a name should list the known names (see `UnknownName`).

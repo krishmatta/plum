@@ -7,6 +7,7 @@ from plum import (
     JsonlCodec,
     JsonModelCodec,
     ParquetCodec,
+    RowConverter,
     TorchListCodec,
     infer_arrow_schema,
     write_atomic,
@@ -127,12 +128,14 @@ def test_parquet_codec_roundtrip(tmp_path):
     assert codec.read(path) == records
 
 
-def test_parquet_codec_custom_row_hooks(tmp_path):
+def test_parquet_codec_custom_converter(tmp_path):
     codec = ParquetCodec(
         Point,
-        arrow_schema=pa.schema([pa.field("x", pa.int64()), pa.field("y", pa.int64())]),
-        to_row=lambda m: {"x": m.x, "y": m.y},
-        from_row=lambda row: Point(**row),
+        converter=RowConverter(
+            arrow_schema=pa.schema([pa.field("x", pa.int64()), pa.field("y", pa.int64())]),
+            to_row=lambda m: {"x": m.x, "y": m.y},
+            from_row=lambda row: Point(**row),
+        ),
     )
     path = tmp_path / "pts.parquet"
     pts = [Point(x=1, y=2)]

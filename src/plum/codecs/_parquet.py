@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import types
 import typing
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Generic, TypeVar
 
@@ -76,36 +77,43 @@ def infer_arrow_schema(model: type[BaseModel]):
     )
 
 
+@dataclass(frozen=True)
+class RowConverter(Generic[M]):
+    """The three fields must agree: to_row/from_row invert each other, and
+    arrow_schema describes the rows to_row produces — hence one object, not
+    separate kwargs."""
+
+    arrow_schema: Any
+    to_row: Callable[[M], dict]
+    from_row: Callable[[dict], M]
+
+
 class ParquetCodec(Generic[M]):
     extension = ".parquet"
 
-    def __init__(
-        self,
-        model: type[M],
-        *,
-        arrow_schema: Any = None,
-        to_row: Callable[[M], dict] | None = None,
-        from_row: Callable[[dict], M] | None = None,
-    ) -> None:
+    def __init__(self, model: type[M], *, converter: RowConverter[M] | None = None) -> None:
         self.model = model
-        self._arrow_schema = arrow_schema
-        self._to_row = to_row or (lambda m: m.model_dump())
-        self._from_row = from_row or (lambda row: model.model_validate(row))
+        self._converter = converter
 
     @property
-    def arrow_schema(self):
-        if self._arrow_schema is None:
-            self._arrow_schema = infer_arrow_schema(self.model)
-        return self._arrow_schema
+    def converter(self) -> RowConverter[M]:
+        if self._converter is None:
+            self._converter = RowConverter(
+                arrow_schema=infer_arrow_schema(self.model),
+                to_row=lambda m: m.model_dump(),
+                from_row=self.model.model_validate,
+            )
+        return self._converter
 
     def write(self, objs: list[M], path: Path) -> None:
         import pyarrow as pa
         import pyarrow.parquet as pq
 
-        table = pa.Table.from_pylist([self._to_row(o) for o in objs], schema=self.arrow_schema)
+        conv = self.converter
+        table = pa.Table.from_pylist([conv.to_row(o) for o in objs], schema=conv.arrow_schema)
         write_atomic(path, lambda p: pq.write_table(table, p))
 
     def read(self, path: Path) -> list[M]:
         import pyarrow.parquet as pq
 
-        return [self._from_row(row) for row in pq.read_table(path).to_pylist()]
+        return [self.converter.from_row(row) for row in pq.read_table(path).to_pylist()]
