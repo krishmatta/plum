@@ -12,6 +12,7 @@ from plum.codecs import (
     write_atomic,
 )
 from plum.config import Params, parse_kw
+from plum.experiment import Experiment, Runner, sweep
 from plum.errors import (
     DirtyWorkingTree,
     DuplicateRegistration,
@@ -38,10 +39,13 @@ __all__ = [
     "Catalog",
     "Codec",
     "DirtyWorkingTree",
+    "Experiment",
     "GitInfo",
     "DuplicateRegistration",
     "InputRef",
+    "Runner",
     "capture_git",
+    "sweep",
     "JsonModelCodec",
     "JsonlCodec",
     "Params",
