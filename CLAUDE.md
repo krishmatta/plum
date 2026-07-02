@@ -3,6 +3,12 @@
 A reusable research-pipeline library: pipelines, artifacts, catalog, registries.
 Built in phases; currently at the primitives stage (registry, codecs, config).
 
+## Working model
+
+When running as Fable, act as an orchestrator only: deploy Opus subagents to
+perform the actual execution (code edits, running commands), then review their
+work and give feedback. Do not make code changes directly.
+
 ## Commands
 
 - Test: `uv run pytest -q`
