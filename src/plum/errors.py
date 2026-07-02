@@ -24,3 +24,15 @@ class UnknownName(PlumError):
 class UnknownArtifact(UnknownName):
     def __init__(self, name: str, known: list[str]) -> None:
         super().__init__("artifact", name, known)
+
+
+class PriorRunFailed(PlumError):
+    def __init__(self, pipeline: str, run_id: str, error: str | None) -> None:
+        self.pipeline = pipeline
+        self.run_id = run_id
+        self.error = error
+        cause = f": {error.strip().splitlines()[-1]}" if error else ""
+        super().__init__(
+            f"{pipeline} run '{run_id}' previously failed{cause}; "
+            "pass resume=True to continue from checkpoints or force=True to start over"
+        )

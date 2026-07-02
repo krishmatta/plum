@@ -9,6 +9,7 @@ from plum import (
     JsonModelCodec,
     JsonlCodec,
     Pipeline,
+    PriorRunFailed,
     Store,
     load_manifest,
 )
@@ -103,6 +104,55 @@ def test_error_manifest(tmp_path):
     manifest = load_manifest(store.run_dir("thing", None, "r1") / "manifest.json")
     assert manifest.status == "error"
     assert "kaboom" in manifest.error
+
+
+class Flaky(Pipeline):
+    name = "flaky"
+    produces = "thing"
+
+    class Params(Pipeline.Params):
+        pass
+
+    def __init__(self, store):
+        super().__init__(store)
+        self.calls = 0
+
+    def _run(self, ctx):
+        self.calls += 1
+        if self.calls == 1:
+            raise RuntimeError("kaboom")
+        ctx.output(Payload(value=1))
+
+
+def test_error_rerun_requires_resume(tmp_path):
+    store = build_store(tmp_path)
+    pipe = Flaky(store)
+    with pytest.raises(RuntimeError):
+        pipe.run("r1")
+    with pytest.raises(PriorRunFailed) as exc:
+        pipe.run("r1")
+    assert pipe.calls == 1
+    assert "kaboom" in str(exc.value)
+
+
+def test_error_rerun_with_resume(tmp_path):
+    store = build_store(tmp_path)
+    pipe = Flaky(store)
+    with pytest.raises(RuntimeError):
+        pipe.run("r1")
+    manifest = pipe.run("r1", resume=True)
+    assert pipe.calls == 2
+    assert manifest.status == "ok"
+
+
+def test_error_rerun_with_force(tmp_path):
+    store = build_store(tmp_path)
+    pipe = Flaky(store)
+    with pytest.raises(RuntimeError):
+        pipe.run("r1")
+    manifest = pipe.run("r1", force=True)
+    assert pipe.calls == 2
+    assert manifest.status == "ok"
 
 
 def test_unknown_param_raises(tmp_path):

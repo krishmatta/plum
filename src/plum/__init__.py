@@ -14,6 +14,7 @@ from plum.config import Params, parse_kw
 from plum.errors import (
     DuplicateRegistration,
     PlumError,
+    PriorRunFailed,
     UnknownArtifact,
     UnknownName,
 )
@@ -31,6 +32,7 @@ __all__ = [
     "ParquetCodec",
     "Pipeline",
     "PlumError",
+    "PriorRunFailed",
     "Registry",
     "RowConverter",
     "RunContext",

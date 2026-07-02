@@ -12,6 +12,7 @@ from pydantic import BaseModel, Field
 from plum.catalog import Store
 from plum.checkpoint import Shards
 from plum.codecs import Codec, write_atomic
+from plum.errors import PriorRunFailed
 
 import plum.config
 
@@ -88,8 +89,9 @@ class Pipeline(abc.ABC):
 
     The base creates `<data_root>/<produces>/[<scope>/]<run_id>/`, runs the body,
     and writes manifest.json. Re-running an existing run id is cheap and safe:
-    completed runs are skipped, interrupted runs resume in place, and
-    `force=True` starts over from scratch.
+    completed runs are skipped, interrupted runs resume in place, error runs
+    require `resume=True` to continue, and `force=True` starts over from
+    scratch.
 
     Subclass contract: set `name` and `produces`, define a `Params` model, and
     implement `_run(ctx)`; override `scope()` to group runs (default is flat).
@@ -113,7 +115,9 @@ class Pipeline(abc.ABC):
         raise NotImplementedError
 
     @final
-    def run(self, run_id: str, *, force: bool = False, **params) -> RunManifest:
+    def run(
+        self, run_id: str, *, force: bool = False, resume: bool = False, **params
+    ) -> RunManifest:
         if not run_id:
             raise ValueError("run_id is required")
         p = self.Params(**params)
@@ -129,6 +133,8 @@ class Pipeline(abc.ABC):
                     existing = load_manifest(manifest_path)
                     if existing.status == "ok":
                         return existing  # already done; rerunning is a no-op
+                    if existing.status == "error" and not resume:
+                        raise PriorRunFailed(self.name, run_id, existing.error)
                 # otherwise: interrupted run, resume in place
         run_dir.mkdir(parents=True, exist_ok=True)
 
