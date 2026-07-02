@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Any
 
 from plum.codecs import Codec
-from plum.errors import UnknownArtifact
+from plum.errors import UnknownArtifact, UnknownName
 from plum.registry import Registry
 
 
@@ -26,9 +26,9 @@ class Catalog(Registry[Artifact]):
 
     def get(self, name: str) -> Artifact:
         try:
-            return self._items[name]
-        except KeyError:
-            raise UnknownArtifact(name, self.names()) from None
+            return super().get(name)
+        except UnknownName as e:
+            raise UnknownArtifact(name, e.known) from None
 
 
 class Store:
