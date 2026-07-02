@@ -54,12 +54,20 @@ def capture_git(cwd: Path) -> GitInfo | None:
 
 
 class InputRef(BaseModel):
-    """One upstream artifact a run read: an edge in the artifact graph. Minimal
-    on purpose -- everything else about the input is in its own manifest."""
+    """One upstream artifact a run read: an edge in the artifact graph.
+
+    `produced_at` and `git_sha` pin the exact generation that was read. Run ids
+    are mutable -- a force-regenerated run reuses the id but rewrites its content
+    -- so the reference alone can later point at a different generation than the
+    one actually consumed. The stamp makes that staleness detectable: it differs
+    from the upstream's current manifest once the upstream is regenerated.
+    """
 
     artifact: str
     run_id: str
     scope: str | None = None
+    produced_at: str | None = None
+    git_sha: str | None = None
 
 
 class RunManifest(BaseModel):
@@ -121,10 +129,28 @@ class RunContext:
 
     def read(self, artifact: str, run_id: str, *, scope: str | None = None) -> Any:
         obj = self.store.read(artifact, run_id, scope=scope)
-        ref = InputRef(artifact=artifact, run_id=run_id, scope=scope)
+        ref = self._input_ref(artifact, run_id, scope)
         if ref not in self._inputs:
             self._inputs.append(ref)
         return obj
+
+    def _input_ref(self, artifact: str, run_id: str, scope: str | None) -> InputRef:
+        produced_at = git_sha = None
+        try:
+            m = load_manifest(
+                self.store.run_dir(artifact, run_id, scope=scope) / MANIFEST_FILE
+            )
+            produced_at = m.finished_at
+            git_sha = m.git.sha if m.git else None
+        except Exception:
+            pass  # upstream has no plum manifest (e.g. an externally-placed artifact)
+        return InputRef(
+            artifact=artifact,
+            run_id=run_id,
+            scope=scope,
+            produced_at=produced_at,
+            git_sha=git_sha,
+        )
 
     def output(self, obj: Any) -> Path:
         return self.store.write(self._produces, self.run_id, obj, scope=self._scope)
