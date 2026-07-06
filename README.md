@@ -141,7 +141,7 @@ class MethodSweep(Experiment):
 # app.py
 autodiscover(pipelines); autodiscover(methods); autodiscover(experiments)
 app = build_cli(catalog=CATALOG, pipelines=PIPELINES,
-                sources={"methods": METHODS}, experiments=EXPERIMENTS)
+                listings={"methods": METHODS}, experiments=EXPERIMENTS)
 ```
 
 ## CLI
@@ -159,7 +159,7 @@ $ myproj show apply p1 cube                        # manifest as JSON
 
 $ myproj pipelines list
 $ myproj pipelines params apply
-$ myproj methods list                              # one `list` per source family
+$ myproj methods list                              # one `list` per listing family
 $ myproj experiments list
 $ myproj experiments run method-sweep
 ```

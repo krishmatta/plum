@@ -78,12 +78,12 @@ def build_cli(
     *,
     catalog: Catalog,
     pipelines: Registry[type[Pipeline]],
-    sources: dict[str, Registry] | None = None,
+    listings: dict[str, Registry] | None = None,
     experiments: Registry | None = None,
     data_root_default: str = "data",
 ) -> typer.Typer:
     """The whole generic CLI over a project's registries: run, pipelines
-    list/params, runs, and a `list` subcommand per source family."""
+    list/params, runs, and a `list` subcommand per listing family."""
     app = typer.Typer(no_args_is_help=True, pretty_exceptions_show_locals=False)
 
     @app.command()
@@ -191,8 +191,8 @@ def build_cli(
             raise typer.Exit(1)
         typer.echo(m.model_dump_json(indent=2))
 
-    for family, registry in (sources or {}).items():
-        app.add_typer(_source_app(registry), name=family)
+    for family, registry in (listings or {}).items():
+        app.add_typer(_listing_app(registry), name=family)
 
     if experiments is not None:
         app.add_typer(
@@ -230,16 +230,16 @@ def _experiments_app(
     return sub
 
 
-def _source_app(registry: Registry) -> typer.Typer:
+def _listing_app(registry: Registry) -> typer.Typer:
     sub = typer.Typer(no_args_is_help=True)
 
     @sub.command("list")
-    def source_list() -> None:
-        for source_id, source in registry.items():
-            display = getattr(source, "display_name", "")
-            if display and display != source_id:
-                typer.echo(f"{source_id}\t{display}")
+    def listing_list() -> None:
+        for item_id, item in registry.items():
+            display = getattr(item, "display_name", "")
+            if display and display != item_id:
+                typer.echo(f"{item_id}\t{display}")
             else:
-                typer.echo(source_id)
+                typer.echo(item_id)
 
     return sub

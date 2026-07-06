@@ -13,11 +13,11 @@ autodiscover(tests.example.pipelines)
 autodiscover(tests.example.methods)
 autodiscover(tests.example.experiments)
 
-# sources= adds `methods list`; experiments= adds `experiments list/run`
+# listings= adds `methods list`; experiments= adds `experiments list/run`
 app = build_cli(
     catalog=CATALOG,
     pipelines=PIPELINES,
-    sources={"methods": METHODS},
+    listings={"methods": METHODS},
     experiments=EXPERIMENTS,
 )
 
