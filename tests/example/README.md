@@ -10,23 +10,32 @@ Two pipelines, two artifacts:
   method on disk (`powers/<method>/<run_id>/`). The body checkpoints every
   4 items, so an interrupted run resumes at the last complete shard.
 
+One experiment:
+
+- `method-sweep` runs `load` once, then sweeps `apply` over both methods
+  through the `Runner`, so the shared upstream is computed exactly once.
+
 The layout mirrors a real plum project:
 
 ```
 schema.py       records (plain pydantic models)
 catalog.py      artifact declarations
-registries.py   the pipeline and source registries
+registries.py   the pipeline, method, and experiment registries
 methods/        a source family; autodiscover imports it
-pipelines.py    the two stages
+pipelines/      the two stages
+experiments/    the sweep
 app.py          wiring: build_cli(...)
 ```
 
 Drive it from the repo root:
 
 ```console
-$ uv run python -m tests.example.app run load nums n=6
-$ uv run python -m tests.example.app run apply p1 numbers_run=nums method=cube
+$ uv run python -m tests.example.app run load nums n=6 -m "baseline"
+$ uv run python -m tests.example.app run apply p1 numbers_run=nums method=cube -m "cube"
 $ uv run python -m tests.example.app methods list
+$ uv run python -m tests.example.app experiments list
+$ uv run python -m tests.example.app experiments run method-sweep
 ```
 
-`tests/test_cli.py` and `tests/test_sources.py` exercise it.
+`tests/test_cli.py`, `tests/test_sources.py`, `tests/test_experiment.py`, and
+`tests/test_descriptions.py` exercise it.
