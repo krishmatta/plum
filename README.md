@@ -213,8 +213,10 @@ on load. `--remote` selects the table (default `origin`).
   A crashed pull leaves nothing at the run path: pulled runs are staged and
   appear atomically, manifest included.
 - **Lineage-closure pull.** `pull ARTIFACT RUN_ID [--scope S]` fetches that run
-  and the transitive closure of its recorded inputs. A closure member is
-  satisfied by a local copy of the same generation (or one the remote lacks);
+  and the transitive closure of its recorded inputs. Closure members are
+  fetched at the exact generations the lineage recorded; if an upstream was
+  regenerated since, the pull errors (`StaleLineage`) instead of substituting.
+  A closure member is satisfied by a local copy of the consumed generation;
   a divergent local copy is a conflict under the same all-or-nothing rule. A
   member on neither side is an error.
 

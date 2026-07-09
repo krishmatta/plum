@@ -11,7 +11,9 @@ from typer.testing import CliRunner
 
 from plum import (
     BACKENDS,
+    InputRef,
     PlumError,
+    StaleLineage,
     Store,
     SyncConflict,
     UnknownName,
@@ -306,7 +308,80 @@ def test_lineage_closure_skips_local_only_upstream(tmp_path):
     push(src, folder(remote))
     shutil.rmtree(remote / "numbers" / "base")  # upstream absent on the remote
 
-    run(dest, "load", "base", n=6)  # a local-only upstream is satisfied as-is
+    # the consumed generation itself, present only locally
+    shutil.copytree(src / "numbers" / "base", dest / "numbers" / "base")
+
+    result = pull(dest, folder(remote), artifact="powers", run_id="p1", scope="cube")
+    assert result.transferred == ["powers/cube/p1"]
+
+
+def test_lineage_pull_errors_on_regenerated_upstream(tmp_path):
+    src, remote, dest = tmp_path / "src", tmp_path / "remote", tmp_path / "dest"
+    run(src, "load", "base", n=6)
+    run(src, "apply", "p1", numbers_run="base", method="cube")
+    push(src, folder(remote))
+
+    run(src, "load", "base", n=6, force=True)  # new generation at the same address
+    push(src, folder(remote), force=True)
+
+    with pytest.raises(StaleLineage) as exc:
+        pull(dest, folder(remote), artifact="powers", run_id="p1", scope="cube")
+    assert "numbers/base" in str(exc.value)
+    assert not (dest / "powers").exists() and not (dest / "numbers").exists()
+
+
+def test_lineage_pull_pinned_local_beats_regenerated_remote(tmp_path):
+    src, remote, dest = tmp_path / "src", tmp_path / "remote", tmp_path / "dest"
+    run(src, "load", "base", n=6)
+    run(src, "apply", "p1", numbers_run="base", method="cube")
+    push(src, folder(remote))
+    consumed = load_manifest(src / "numbers" / "base" / MANIFEST_FILE).uuid
+    shutil.copytree(src / "numbers" / "base", dest / "numbers" / "base")
+
+    run(src, "load", "base", n=6, force=True)
+    push(src, folder(remote), force=True)
+
+    result = pull(dest, folder(remote), artifact="powers", run_id="p1", scope="cube")
+    assert result.transferred == ["powers/cube/p1"]
+    assert result.forced == []
+    assert load_manifest(dest / "numbers" / "base" / MANIFEST_FILE).uuid == consumed
+
+
+def test_lineage_pull_pin_disagreement_errors(tmp_path):
+    remote, dest = tmp_path / "remote", tmp_path / "dest"
+    root = RunManifest(
+        pipeline="apply",
+        run_id="p1",
+        uuid=uuid4().hex,
+        status="ok",
+        inputs=[
+            InputRef(artifact="numbers", run_id="base", uuid="u1"),
+            InputRef(artifact="numbers", run_id="base", uuid="u2"),
+        ],
+    )
+    run_dir = remote / "powers" / "cube" / "p1"
+    run_dir.mkdir(parents=True)
+    (run_dir / MANIFEST_FILE).write_text(root.model_dump_json())
+
+    with pytest.raises(StaleLineage) as exc:
+        pull(dest, folder(remote), artifact="powers", run_id="p1", scope="cube")
+    assert "u1" in str(exc.value) and "u2" in str(exc.value)
+
+
+def test_lineage_pull_unpinned_ref_satisfied_by_any_local(tmp_path):
+    remote, dest = tmp_path / "remote", tmp_path / "dest"
+    root = RunManifest(
+        pipeline="apply",
+        run_id="p1",
+        uuid=uuid4().hex,
+        status="ok",
+        inputs=[InputRef(artifact="numbers", run_id="base", uuid=None)],
+    )
+    run_dir = remote / "powers" / "cube" / "p1"
+    run_dir.mkdir(parents=True)
+    (run_dir / MANIFEST_FILE).write_text(root.model_dump_json())
+
+    write_manifest(dest / "numbers" / "base", status="ok")  # any local generation
 
     result = pull(dest, folder(remote), artifact="powers", run_id="p1", scope="cube")
     assert result.transferred == ["powers/cube/p1"]

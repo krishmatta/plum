@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterator
 
-from plum.errors import PlumError, SyncConflict
+from plum.errors import PlumError, StaleLineage, SyncConflict
 from plum.pipeline import MANIFEST_FILE, RunManifest, load_manifest
 from plum.sync._backend import SyncBackend
 
@@ -174,35 +174,61 @@ def _run_relpath(artifact: str, run_id: str, scope: str | None) -> str:
 def _closure(
     backend: SyncBackend, data_root: Path, artifact: str, run_id: str, scope: str | None
 ) -> dict[str, RunManifest]:
-    """The transitive input-closure of one run, minus members already satisfied
-    locally. Satisfied means local-only (the remote need not have it) or the same
-    generation on both sides; a divergent local copy stays a candidate so the
-    all-or-nothing conflict rule applies to lineage pulls too. A member present
-    on neither side is a hard error."""
+    """The transitive input-closure of one run, each member pinned to the
+    generation the consuming manifest's InputRef recorded. The root is unpinned
+    (taken at the remote's current generation); its refs pin everything below.
+
+    A pinned member is satisfied only by a local copy of that exact generation;
+    a pin the remote no longer holds raises StaleLineage rather than pairing the
+    downstream with data it wasn't computed from. Refs without a uuid
+    (externally-placed upstreams, no manifest at read time) keep the unpinned
+    rules: satisfied by any local copy, fetched at remote current otherwise.
+    A member on neither side is a hard error."""
     to_fetch: dict[str, RunManifest] = {}
-    seen: set[str] = set()
-    queue = [(artifact, run_id, scope)]
-    while queue:
-        a, r, s = queue.pop()
+    pins: dict[str, str | None] = {}
+    queue: list[str] = []
+
+    def visit(a: str, r: str, s: str | None, pin: str | None) -> None:
         relpath = _run_relpath(a, r, s)
-        if relpath in seen:
-            continue
-        seen.add(relpath)
-        local_manifest = _local_dir(data_root, relpath) / MANIFEST_FILE
-        remote_m = _read_remote_manifest(backend, relpath)
-        if remote_m is None:
-            if local_manifest.exists():
-                continue
-            raise PlumError(f"run '{relpath}' is on neither the remote nor local disk")
-        if local_manifest.exists():
+        if relpath in pins:
+            prior = pins[relpath]
+            if pin is not None and prior is not None and pin != prior:
+                raise StaleLineage(relpath, conflicting=(prior, pin))
+            return
+        pins[relpath] = pin
+        queue.append(relpath)
+
+    visit(artifact, run_id, scope, None)
+    while queue:
+        relpath = queue.pop()
+        pin = pins[relpath]
+        local_path = _local_dir(data_root, relpath) / MANIFEST_FILE
+        local_m = None
+        if local_path.exists():
             try:
-                local_m = load_manifest(local_manifest)
+                local_m = load_manifest(local_path)
             except Exception:
                 local_m = None
+        if pin is not None and local_m is not None and local_m.uuid == pin:
+            continue  # the consumed generation is already local: no fetch, no traversal
+        remote_m = _read_remote_manifest(backend, relpath)
+        if pin is None:
+            if remote_m is None:
+                if local_path.exists():
+                    continue  # locally satisfied; remote presence not required
+                raise PlumError(f"run '{relpath}' is on neither the remote nor local disk")
             if local_m is not None and local_m.uuid == remote_m.uuid:
                 continue  # same generation: no fetch, and its inputs need no traversal
+        else:
+            if remote_m is None and local_m is None:
+                raise PlumError(f"run '{relpath}' is on neither the remote nor local disk")
+            if remote_m is None:
+                raise StaleLineage(relpath, expected=pin, found=local_m.uuid)
+            if remote_m.uuid != pin:
+                raise StaleLineage(relpath, expected=pin, found=remote_m.uuid)
+        # candidates with a pin carry remote_m.uuid == pin, so pull()'s local-vs-remote
+        # comparison is equivalent to comparing against the pin
         to_fetch[relpath] = remote_m
-        # traverse the remote's inputs: a forced pull materializes that generation
         for ref in remote_m.inputs:
-            queue.append((ref.artifact, ref.run_id, ref.scope))
+            visit(ref.artifact, ref.run_id, ref.scope, ref.uuid)
     return to_fetch
