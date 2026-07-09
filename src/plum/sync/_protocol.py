@@ -1,11 +1,12 @@
 from __future__ import annotations
 
+import os
 import shutil
+import uuid
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterator
 
-from plum.codecs import write_atomic
 from plum.errors import PlumError, SyncConflict
 from plum.pipeline import MANIFEST_FILE, RunManifest, load_manifest
 from plum.sync._backend import SyncBackend
@@ -23,7 +24,11 @@ def _local_runs(data_root: Path) -> Iterator[tuple[str, Path]]:
         return
     for manifest_path in data_root.rglob(MANIFEST_FILE):
         run_dir = manifest_path.parent
-        yield run_dir.relative_to(data_root).as_posix(), run_dir
+        relpath = run_dir.relative_to(data_root)
+        # stranded pull staging under .tmp must never be discovered as a run
+        if any(part.startswith(".") for part in relpath.parts):
+            continue
+        yield relpath.as_posix(), run_dir
 
 
 def _local_dir(data_root: Path, relpath: str) -> Path:
@@ -71,14 +76,23 @@ def _upload_run(backend: SyncBackend, data_root: Path, run_dir: Path, relpath: s
 
 
 def _download_run(backend: SyncBackend, data_root: Path, relpath: str) -> None:
-    manifest_rel = f"{relpath}/{MANIFEST_FILE}"
-    for rel in backend.list_files(relpath):
-        if rel != manifest_rel:
-            write_atomic(_local_dir(data_root, rel), lambda p, r=rel: backend.download(r, p))
-    write_atomic(
-        _local_dir(data_root, manifest_rel),
-        lambda p: backend.download(manifest_rel, p),
-    )
+    """Stage the whole run, then rename into place: the run appears atomically,
+    and the destructive replace of any existing local copy happens only after a
+    complete download."""
+    # staging lives inside data_root so the final os.replace is a same-filesystem rename
+    staging = data_root / ".tmp" / uuid.uuid4().hex
+    try:
+        for rel in backend.list_files(relpath):
+            staged_file = staging.joinpath(*rel.split("/"))
+            staged_file.parent.mkdir(parents=True, exist_ok=True)
+            backend.download(rel, staged_file)
+        dest = _local_dir(data_root, relpath)
+        if dest.exists():
+            shutil.rmtree(dest)
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        os.replace(staging.joinpath(*relpath.split("/")), dest)
+    finally:
+        shutil.rmtree(staging, ignore_errors=True)
 
 
 def push(data_root: Path | str, backend: SyncBackend, *, force: bool = False) -> SyncResult:
@@ -148,9 +162,6 @@ def pull(
 
     forced = conflicts if force else []
     for relpath in missing + forced:
-        dest = _local_dir(data_root, relpath)
-        if dest.exists():
-            shutil.rmtree(dest)
         _download_run(backend, data_root, relpath)
     return SyncResult(missing, skipped, forced)
 

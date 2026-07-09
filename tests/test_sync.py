@@ -199,6 +199,67 @@ def test_pull_force_replaces_local_run(tmp_path):
     assert store(dest).read("numbers", "r1") == Numbers(values=[0, 1, 2, 3, 4])
 
 
+def make_flaky(remote: Path, fail_on: int) -> FolderBackend:
+    class Flaky(FolderBackend):
+        def __init__(self, options):
+            super().__init__(options)
+            self.calls = 0
+
+        def download(self, relpath, dest_path):
+            self.calls += 1
+            if self.calls == fail_on:
+                raise RuntimeError("connection lost")
+            super().download(relpath, dest_path)
+
+    return Flaky(FolderBackend.Options(path=str(remote)))
+
+
+def test_pull_crash_leaves_nothing_at_run_path(tmp_path):
+    src, remote, dest = tmp_path / "src", tmp_path / "remote", tmp_path / "dest"
+    run(src, "load", "r1", n=6)  # two files: numbers.json + manifest.json
+    push(src, folder(remote))
+
+    with pytest.raises(RuntimeError):
+        pull(dest, make_flaky(remote, fail_on=2))
+    assert not (dest / "numbers").exists()
+    leftovers = [p for p in dest.rglob("*") if p.is_file()]
+    assert all(".tmp" in p.parts for p in leftovers)
+
+
+def test_pull_retry_after_crash_succeeds(tmp_path):
+    src, remote, dest = tmp_path / "src", tmp_path / "remote", tmp_path / "dest"
+    run(src, "load", "r1", n=6)
+    push(src, folder(remote))
+
+    with pytest.raises(RuntimeError):
+        pull(dest, make_flaky(remote, fail_on=2))
+
+    result = pull(dest, folder(remote))
+    assert result.transferred == ["numbers/r1"]
+    assert store(dest).read("numbers", "r1") == Numbers(values=list(range(6)))
+
+
+def test_force_pull_crash_preserves_local_run(tmp_path):
+    src, remote, dest = tmp_path / "src", tmp_path / "remote", tmp_path / "dest"
+    run(src, "load", "r1", n=5)
+    push(src, folder(remote))
+
+    run(dest, "load", "r1", n=2)  # divergent local generation
+
+    with pytest.raises(RuntimeError):
+        pull(dest, make_flaky(remote, fail_on=2), force=True)
+    assert store(dest).read("numbers", "r1") == Numbers(values=[0, 1])
+
+
+def test_push_ignores_staging_leftovers(tmp_path):
+    local, remote = tmp_path / "local", tmp_path / "remote"
+    write_manifest(local / ".tmp" / "x" / "numbers" / "r1", status="ok")
+
+    result = push(local, folder(remote))
+    assert result.transferred == []
+    assert folder(remote).list_runs() == []
+
+
 def test_lineage_closure_pulls_upstream(tmp_path):
     src, remote, dest = tmp_path / "src", tmp_path / "remote", tmp_path / "dest"
     run(src, "load", "base", n=6)

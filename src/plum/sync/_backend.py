@@ -21,7 +21,7 @@ class SyncBackend(Source):
     Files transfer as streams (`upload`/`download`), never as whole in-memory
     buffers -- artifacts can exceed memory and single-PUT limits. `read_bytes`
     exists only for manifests, which are tiny. `download` may assume `dest`'s
-    parent directory already exists (core hands it a write_atomic temp path).
+    parent directory already exists (core creates it before the call).
     """
 
     class Options(BaseModel):

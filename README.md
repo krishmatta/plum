@@ -210,7 +210,9 @@ on load. `--remote` selects the table (default `origin`).
   difference is a conflict: `push`/`pull` transfer nothing and raise
   `SyncConflict`. Pass `--force` to overwrite the losing side (a forced run is
   deleted first, so a regenerated run never mixes files across generations).
-  manifest.json is always written last, so its presence implies a complete run.
+  manifest.json is always pushed last, so its presence implies a complete run.
+  A crashed pull leaves nothing at the run path: pulled runs are staged and
+  appear atomically, manifest included.
 - **Lineage-closure pull.** `pull ARTIFACT RUN_ID [--scope S]` fetches that run
   and the transitive closure of its recorded inputs. A closure member is
   satisfied by a local copy of the same generation (or one the remote lacks);
