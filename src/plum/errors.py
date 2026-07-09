@@ -63,6 +63,16 @@ class PriorRunFailed(PlumError):
         )
 
 
+class SyncConflict(PlumError):
+    def __init__(self, direction: str, runs: list[str]) -> None:
+        self.direction = direction
+        self.runs = sorted(runs)
+        super().__init__(
+            f"{direction} blocked: {len(self.runs)} run(s) differ between local and "
+            f"remote (" + "; ".join(self.runs) + "); pass --force to overwrite"
+        )
+
+
 class DirtyWorkingTree(PlumError):
     def __init__(self, repo: str, reason: str) -> None:
         self.repo = repo

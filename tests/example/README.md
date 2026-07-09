@@ -15,6 +15,12 @@ One experiment:
 - `method-sweep` runs `load` once, then sweeps `apply` over both methods
   through the `Runner`, so the shared upstream is computed exactly once.
 
+One sync backend:
+
+- `folder` (`backends/folder.py`) is a `SyncBackend` over a plain directory,
+  the template for a custom `push`/`pull` remote. `autodiscover` registers it
+  like a method.
+
 The layout mirrors a real plum project:
 
 ```
@@ -24,6 +30,7 @@ registries.py   the pipeline, method, and experiment registries
 methods/        a source family; autodiscover imports it
 pipelines/      the two stages
 experiments/    the sweep
+backends/       a custom sync backend
 app.py          wiring: build_cli(...)
 ```
 

@@ -19,6 +19,7 @@ from plum.errors import (
     ParamsMismatch,
     PlumError,
     PriorRunFailed,
+    SyncConflict,
     UnknownArtifact,
     UnknownName,
 )
@@ -33,9 +34,11 @@ from plum.pipeline import (
 )
 from plum.registry import Registry
 from plum.sources import Source, autodiscover
+from plum.sync import BACKENDS, S3Backend, SyncBackend, load_remote, pull, push
 
 __all__ = [
     "Artifact",
+    "BACKENDS",
     "Catalog",
     "Codec",
     "DirtyWorkingTree",
@@ -58,9 +61,12 @@ __all__ = [
     "RowConverter",
     "RunContext",
     "RunManifest",
+    "S3Backend",
     "Shards",
     "Source",
     "Store",
+    "SyncBackend",
+    "SyncConflict",
     "TorchListCodec",
     "UnknownArtifact",
     "UnknownName",
@@ -68,6 +74,9 @@ __all__ = [
     "build_cli",
     "infer_arrow_schema",
     "load_manifest",
+    "load_remote",
     "parse_kw",
+    "pull",
+    "push",
     "write_atomic",
 ]
