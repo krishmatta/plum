@@ -205,7 +205,8 @@ on load. `--remote` selects the table (default `origin`).
   pushed. A crashed or mid-resume run never leaks to the remote, even with
   `--force`.
 - **Conflict rule.** A run present on both sides is compared by its manifest's
-  `(started_at, finished_at)`. Equal means already synced (skipped). Any
+  generation uuid, falling back to `(started_at, finished_at)` for manifests
+  that predate the field. Equal means already synced (skipped). Any
   difference is a conflict: `push`/`pull` transfer nothing and raise
   `SyncConflict`. Pass `--force` to overwrite the losing side (a forced run is
   deleted first, so a regenerated run never mixes files across generations).

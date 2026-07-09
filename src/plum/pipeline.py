@@ -4,6 +4,7 @@ import abc
 import shutil
 import subprocess
 import traceback
+import uuid as uuidlib
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, ClassVar, final
@@ -56,16 +57,18 @@ def capture_git(cwd: Path) -> GitInfo | None:
 class InputRef(BaseModel):
     """One upstream artifact a run read: an edge in the artifact graph.
 
-    `produced_at` and `git_sha` pin the exact generation that was read. Run ids
-    are mutable -- a force-regenerated run reuses the id but rewrites its content
-    -- so the reference alone can later point at a different generation than the
-    one actually consumed. The stamp makes that staleness detectable: it differs
+    `uuid` pins the exact generation that was read. Run ids are mutable -- a
+    force-regenerated run reuses the id but rewrites its content -- so the
+    reference alone can later point at a different generation than the one
+    actually consumed. The pin makes that staleness detectable: it differs
     from the upstream's current manifest once the upstream is regenerated.
+    `produced_at` and `git_sha` stay for humans and reproduction.
     """
 
     artifact: str
     run_id: str
     scope: str | None = None
+    uuid: str | None = None
     produced_at: str | None = None
     git_sha: str | None = None
 
@@ -78,6 +81,9 @@ class RunManifest(BaseModel):
 
     pipeline: str
     run_id: str
+    # plain None default: minting one here would make every load of an old
+    # manifest look like a fresh generation
+    uuid: str | None = None
     status: str = "running"  # running | ok | error
     description: str | None = None
     params: dict = {}
@@ -136,11 +142,12 @@ class RunContext:
         return obj
 
     def _input_ref(self, artifact: str, run_id: str, scope: str | None) -> InputRef:
-        produced_at = git_sha = None
+        upstream_uuid = produced_at = git_sha = None
         try:
             m = load_manifest(
                 self.store.run_dir(artifact, run_id, scope=scope) / MANIFEST_FILE
             )
+            upstream_uuid = m.uuid
             produced_at = m.finished_at
             git_sha = m.git.sha if m.git else None
         except Exception:
@@ -149,6 +156,7 @@ class RunContext:
             artifact=artifact,
             run_id=run_id,
             scope=scope,
+            uuid=upstream_uuid,
             produced_at=produced_at,
             git_sha=git_sha,
         )
@@ -242,6 +250,8 @@ class Pipeline(abc.ABC):
         manifest = RunManifest(
             pipeline=self.name,
             run_id=run_id,
+            # every execution attempt (including a resume) is a new generation
+            uuid=uuidlib.uuid4().hex,
             description=description if description is not None else carried_description,
             params=p.model_dump(mode="json"),
             git=git,

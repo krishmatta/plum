@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import shutil
 from pathlib import Path
 
@@ -115,6 +116,48 @@ def test_push_is_idempotent(tmp_path):
     result = push(local, folder(remote))
     assert result.transferred == []
     assert result.skipped == ["numbers/r1"]
+
+
+def test_push_conflicts_on_same_timestamps_different_uuid(tmp_path):
+    # the clock-skew case the timestamp pair alone can't catch
+    local, remote = tmp_path / "local", tmp_path / "remote"
+    stamps = dict(
+        started_at="2026-01-01T00:00:00+00:00", finished_at="2026-01-01T00:01:00+00:00"
+    )
+    write_manifest(local / "numbers" / "r1", status="ok", uuid="aaa", **stamps)
+    write_manifest(remote / "numbers" / "r1", status="ok", uuid="bbb", **stamps)
+
+    with pytest.raises(SyncConflict) as exc:
+        push(local, folder(remote))
+    assert "numbers/r1" in str(exc.value)
+
+
+def test_pre_uuid_manifests_compare_by_timestamps(tmp_path):
+    local, remote = tmp_path / "local", tmp_path / "remote"
+    body = json.dumps(
+        {
+            "pipeline": "load",
+            "run_id": "r1",
+            "status": "ok",
+            "started_at": "2026-01-01T00:00:00+00:00",
+            "finished_at": "2026-01-01T00:01:00+00:00",
+        }
+    )
+    for root in (local, remote):
+        (root / "numbers" / "r1").mkdir(parents=True)
+        (root / "numbers" / "r1" / MANIFEST_FILE).write_text(body)
+
+    result = push(local, folder(remote))
+    assert result.skipped == ["numbers/r1"]
+    assert result.transferred == []
+
+
+def test_input_ref_records_upstream_uuid(tmp_path):
+    run(tmp_path, "load", "base", n=3)
+    apply_m = run(tmp_path, "apply", "p1", numbers_run="base", method="cube")
+    load_m = load_manifest(tmp_path / "numbers" / "base" / MANIFEST_FILE)
+    assert load_m.uuid
+    assert apply_m.inputs[0].uuid == load_m.uuid
 
 
 # ---- pull -------------------------------------------------------------------
