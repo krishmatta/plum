@@ -44,14 +44,6 @@ def _read_remote_manifest(backend: SyncBackend, relpath: str) -> RunManifest | N
         return None
 
 
-def _same_generation(a: RunManifest, b: RunManifest) -> bool:
-    """The uuid is the generation identity; the timestamp pair keeps manifests
-    written before the field existed syncing correctly."""
-    if a.uuid and b.uuid:
-        return a.uuid == b.uuid
-    return (a.started_at, a.finished_at) == (b.started_at, b.finished_at)
-
-
 def _local_status(data_root: Path, relpath: str, remote: RunManifest) -> str:
     """One of: absent, match, conflict -- comparing a candidate to any local run."""
     path = _local_dir(data_root, relpath) / MANIFEST_FILE
@@ -61,7 +53,7 @@ def _local_status(data_root: Path, relpath: str, remote: RunManifest) -> str:
         local = load_manifest(path)
     except Exception:
         return "conflict"
-    return "match" if _same_generation(local, remote) else "conflict"
+    return "match" if local.uuid == remote.uuid else "conflict"
 
 
 def _upload_run(backend: SyncBackend, data_root: Path, run_dir: Path, relpath: str) -> None:
@@ -113,7 +105,7 @@ def push(data_root: Path | str, backend: SyncBackend, *, force: bool = False) ->
             missing.append(relpath)
             continue
         remote_m = _read_remote_manifest(backend, relpath)
-        if remote_m is not None and _same_generation(remote_m, m):
+        if remote_m is not None and remote_m.uuid == m.uuid:
             skipped.append(relpath)
         else:
             conflicts.append(relpath)
@@ -207,7 +199,7 @@ def _closure(
                 local_m = load_manifest(local_manifest)
             except Exception:
                 local_m = None
-            if local_m is not None and _same_generation(local_m, remote_m):
+            if local_m is not None and local_m.uuid == remote_m.uuid:
                 continue  # same generation: no fetch, and its inputs need no traversal
         to_fetch[relpath] = remote_m
         # traverse the remote's inputs: a forced pull materializes that generation

@@ -81,9 +81,7 @@ class RunManifest(BaseModel):
 
     pipeline: str
     run_id: str
-    # plain None default: minting one here would make every load of an old
-    # manifest look like a fresh generation
-    uuid: str | None = None
+    uuid: str
     status: str = "running"  # running | ok | error
     description: str | None = None
     params: dict = {}

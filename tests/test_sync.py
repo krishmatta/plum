@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import shutil
 from pathlib import Path
+from uuid import uuid4
 
 import pytest
 from pydantic import ValidationError
@@ -44,6 +45,7 @@ def folder(root: Path) -> FolderBackend:
 
 def write_manifest(run_dir: Path, **fields) -> None:
     run_dir.mkdir(parents=True, exist_ok=True)
+    fields.setdefault("uuid", uuid4().hex)
     m = RunManifest(pipeline="load", run_id=run_dir.name, **fields)
     (run_dir / MANIFEST_FILE).write_text(m.model_dump_json())
 
@@ -119,7 +121,7 @@ def test_push_is_idempotent(tmp_path):
 
 
 def test_push_conflicts_on_same_timestamps_different_uuid(tmp_path):
-    # the clock-skew case the timestamp pair alone can't catch
+    # the clock-skew case timestamps could never catch
     local, remote = tmp_path / "local", tmp_path / "remote"
     stamps = dict(
         started_at="2026-01-01T00:00:00+00:00", finished_at="2026-01-01T00:01:00+00:00"
@@ -132,7 +134,8 @@ def test_push_conflicts_on_same_timestamps_different_uuid(tmp_path):
     assert "numbers/r1" in str(exc.value)
 
 
-def test_pre_uuid_manifests_compare_by_timestamps(tmp_path):
+def test_push_skips_manifest_without_uuid(tmp_path):
+    # a pre-0.2 manifest fails validation and is simply not a pushable run
     local, remote = tmp_path / "local", tmp_path / "remote"
     body = json.dumps(
         {
@@ -143,13 +146,13 @@ def test_pre_uuid_manifests_compare_by_timestamps(tmp_path):
             "finished_at": "2026-01-01T00:01:00+00:00",
         }
     )
-    for root in (local, remote):
-        (root / "numbers" / "r1").mkdir(parents=True)
-        (root / "numbers" / "r1" / MANIFEST_FILE).write_text(body)
+    (local / "numbers" / "r1").mkdir(parents=True)
+    (local / "numbers" / "r1" / MANIFEST_FILE).write_text(body)
 
     result = push(local, folder(remote))
-    assert result.skipped == ["numbers/r1"]
     assert result.transferred == []
+    assert result.skipped == []
+    assert folder(remote).list_runs() == []
 
 
 def test_input_ref_records_upstream_uuid(tmp_path):
