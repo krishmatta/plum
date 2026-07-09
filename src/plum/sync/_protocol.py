@@ -1,130 +1,14 @@
 from __future__ import annotations
 
-import abc
 import shutil
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterator
 
-from pydantic import BaseModel, ConfigDict
-
 from plum.codecs import write_atomic
-from plum.errors import PlumError, SyncConflict, UnknownName
+from plum.errors import PlumError, SyncConflict
 from plum.pipeline import MANIFEST_FILE, RunManifest, load_manifest
-from plum.registry import Registry
-from plum.sources import Source
-
-
-class SyncBackend(Source):
-    """Transport for whole run directories between a local data_root and a remote.
-
-    Relpaths are always relative to the data root: `list_files`, `read_bytes`,
-    `upload`, and `download` speak full relpaths like "numbers/r1/manifest.json";
-    `list_runs` and `delete_run` speak run-dir relpaths like "numbers/r1". The
-    sync protocol -- completeness filtering, conflict checks, manifest-last
-    ordering -- lives in `push`/`pull`; a backend only moves bytes.
-
-    Files transfer as streams (`upload`/`download`), never as whole in-memory
-    buffers -- artifacts can exceed memory and single-PUT limits. `read_bytes`
-    exists only for manifests, which are tiny. `download` may assume `dest`'s
-    parent directory already exists (core hands it a write_atomic temp path).
-    """
-
-    class Options(BaseModel):
-        model_config = ConfigDict(extra="forbid")
-
-    def __init__(self, options: "SyncBackend.Options") -> None:
-        self.options = options
-
-    @abc.abstractmethod
-    def list_runs(self) -> list[str]:
-        """Relpaths of every remote dir containing a manifest.json."""
-        raise NotImplementedError
-
-    @abc.abstractmethod
-    def list_files(self, run: str) -> list[str]:
-        """Full relpaths of every file under the given run dir."""
-        raise NotImplementedError
-
-    @abc.abstractmethod
-    def read_bytes(self, relpath: str) -> bytes:
-        raise NotImplementedError
-
-    @abc.abstractmethod
-    def upload(self, src: Path, relpath: str) -> None:
-        raise NotImplementedError
-
-    @abc.abstractmethod
-    def download(self, relpath: str, dest: Path) -> None:
-        raise NotImplementedError
-
-    @abc.abstractmethod
-    def delete_run(self, run: str) -> None:
-        raise NotImplementedError
-
-
-BACKENDS: Registry[type[SyncBackend]] = Registry("backend")
-
-
-@BACKENDS.register
-class S3Backend(SyncBackend):
-    id = "s3"
-
-    class Options(SyncBackend.Options):
-        bucket: str
-        prefix: str = ""
-
-    _client_cache = None
-
-    def _client(self):
-        if self._client_cache is None:
-            import boto3
-
-            self._client_cache = boto3.client("s3")
-        return self._client_cache
-
-    def _base(self) -> str:
-        return f"{self.options.prefix}/" if self.options.prefix else ""
-
-    def _key(self, relpath: str) -> str:
-        return self._base() + relpath
-
-    def list_runs(self) -> list[str]:
-        import posixpath
-
-        base = self._base()
-        runs = []
-        for key in self._iter_keys(base):
-            relpath = key[len(base):]
-            if posixpath.basename(relpath) == MANIFEST_FILE:
-                runs.append(posixpath.dirname(relpath))
-        return runs
-
-    def list_files(self, run: str) -> list[str]:
-        base = self._base()
-        return [key[len(base):] for key in self._iter_keys(self._key(run) + "/")]
-
-    def read_bytes(self, relpath: str) -> bytes:
-        obj = self._client().get_object(Bucket=self.options.bucket, Key=self._key(relpath))
-        return obj["Body"].read()
-
-    def upload(self, src: Path, relpath: str) -> None:
-        # upload_file streams via multipart, so artifact size is unbounded
-        self._client().upload_file(str(src), self.options.bucket, self._key(relpath))
-
-    def download(self, relpath: str, dest: Path) -> None:
-        self._client().download_file(self.options.bucket, self._key(relpath), str(dest))
-
-    def delete_run(self, run: str) -> None:
-        client = self._client()
-        for key in self._iter_keys(self._key(run) + "/"):
-            client.delete_object(Bucket=self.options.bucket, Key=key)
-
-    def _iter_keys(self, prefix: str) -> Iterator[str]:
-        paginator = self._client().get_paginator("list_objects_v2")
-        for page in paginator.paginate(Bucket=self.options.bucket, Prefix=prefix):
-            for obj in page.get("Contents", []):
-                yield obj["Key"]
+from plum.sync._backend import SyncBackend
 
 
 @dataclass(frozen=True)
@@ -132,31 +16,6 @@ class SyncResult:
     transferred: list[str]
     skipped: list[str]
     forced: list[str]
-
-
-def load_remote(name: str = "origin", *, config_path: Path | str = "plum.toml") -> SyncBackend:
-    """Resolve a remote from plum.toml. Every key but `backend` is a field of the
-    chosen backend's Options and is pydantic-validated."""
-    config_path = Path(config_path)
-    if not config_path.exists():
-        raise PlumError(
-            f"no {config_path} in {Path.cwd()}; declare a [remotes.<name>] table "
-            "with a backend id and its options"
-        )
-    try:
-        import tomllib
-    except ModuleNotFoundError:
-        import tomli as tomllib
-    data = tomllib.loads(config_path.read_text(encoding="utf-8"))
-    remotes = data.get("remotes", {})
-    if name not in remotes:
-        raise UnknownName("remote", name, list(remotes))
-    section = dict(remotes[name])
-    backend_id = section.pop("backend", None)
-    if backend_id is None:
-        raise PlumError(f"remote '{name}' has no 'backend' key")
-    backend_cls = BACKENDS.get(backend_id)
-    return backend_cls(backend_cls.Options(**section))
 
 
 def _local_runs(data_root: Path) -> Iterator[tuple[str, Path]]:
