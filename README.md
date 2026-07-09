@@ -225,7 +225,7 @@ small:
 class FolderBackend(SyncBackend):
     id = "folder"
 
-    class Options(BaseModel):
+    class Options(SyncBackend.Options):  # rejects unknown plum.toml keys
         path: str
 
     def list_runs(self): ...            # relpaths of dirs with a manifest.json

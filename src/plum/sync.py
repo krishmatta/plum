@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterator
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 from plum.codecs import write_atomic
 from plum.errors import PlumError, SyncConflict, UnknownName
@@ -31,7 +31,7 @@ class SyncBackend(Source):
     """
 
     class Options(BaseModel):
-        pass
+        model_config = ConfigDict(extra="forbid")
 
     def __init__(self, options: "SyncBackend.Options") -> None:
         self.options = options
@@ -70,7 +70,7 @@ BACKENDS: Registry[type[SyncBackend]] = Registry("backend")
 class S3Backend(SyncBackend):
     id = "s3"
 
-    class Options(BaseModel):
+    class Options(SyncBackend.Options):
         bucket: str
         prefix: str = ""
 

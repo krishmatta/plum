@@ -3,8 +3,6 @@ from __future__ import annotations
 import shutil
 from pathlib import Path
 
-from pydantic import BaseModel
-
 from plum import BACKENDS, SyncBackend, write_atomic
 from plum.pipeline import MANIFEST_FILE
 
@@ -16,7 +14,7 @@ class FolderBackend(SyncBackend):
 
     id = "folder"
 
-    class Options(BaseModel):
+    class Options(SyncBackend.Options):
         path: str
 
     @property

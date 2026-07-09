@@ -304,6 +304,13 @@ def test_load_remote_bad_options(tmp_path):
         load_remote("origin")
 
 
+def test_load_remote_rejects_unknown_option_key(tmp_path):
+    write_toml('[remotes.origin]\nbackend = "s3"\nbucket = "b"\nprefx = "typo"\n')
+    with pytest.raises(ValidationError) as exc:
+        load_remote("origin")
+    assert "prefx" in str(exc.value)
+
+
 # ---- CLI --------------------------------------------------------------------
 
 
