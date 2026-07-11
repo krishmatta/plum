@@ -168,7 +168,8 @@ $ myproj pipelines params apply
 $ myproj methods list                              # one `list` per listing family
 $ myproj experiments list
 $ myproj experiments run method-sweep sweep1 n=6   # invocation id + key=value params
-$ myproj runs experiments method-sweep             # invocations, via the same runs/show
+$ myproj experiments runs method-sweep             # list its invocations
+$ myproj experiments show method-sweep sweep1      # dump an invocation manifest
 
 $ myproj push                                      # completed runs -> remote
 $ myproj pull                                      # remote ok runs -> local

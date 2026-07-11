@@ -78,6 +78,37 @@ def _print_table(headers: list[str], rows: list[list[str]]) -> None:
         typer.echo("  ".join(cell.ljust(widths[i]) for i, cell in enumerate(row)).rstrip())
 
 
+def _echo_runs(store: Store, artifact: str, scope: str | None) -> None:
+    run_ids = list_runs(store, artifact, scope)
+    if not run_ids:
+        typer.echo("no runs")
+        return
+    rows = []
+    for run_id in run_ids:
+        m = run_manifest(store, artifact, run_id, scope=scope)
+        if m is None:
+            rows.append([run_id, "(no manifest)", "-", "-", "-"])
+        else:
+            rows.append(
+                [
+                    run_id,
+                    m.status,
+                    _fmt_ts(m.started_at),
+                    _fmt_ts(m.finished_at),
+                    _fmt_duration(m.started_at, m.finished_at),
+                ]
+            )
+    _print_table(["RUN ID", "STATUS", "STARTED", "FINISHED", "DURATION"], rows)
+
+
+def _echo_manifest(store: Store, artifact: str, run_id: str, scope: str | None) -> None:
+    m = run_manifest(store, artifact, run_id, scope=scope)
+    if m is None:
+        typer.echo(f"no manifest for run '{run_id}'", err=True)
+        raise typer.Exit(1)
+    typer.echo(m.model_dump_json(indent=2))
+
+
 def build_cli(
     *,
     catalog: Catalog,
@@ -89,13 +120,6 @@ def build_cli(
     """The whole generic CLI over a project's registries: run, pipelines
     list/params, runs, and a `list` subcommand per listing family."""
     app = typer.Typer(no_args_is_help=True, pretty_exceptions_show_locals=False)
-
-    def _artifact_for(name: str) -> str:
-        """What `runs`/`show` inspect: a pipeline's artifact, or the reserved
-        invocations artifact (whose "scope" argument is then the experiment id)."""
-        if name == EXPERIMENTS_ARTIFACT:
-            return EXPERIMENTS_ARTIFACT
-        return pipelines.get(name).produces
 
     @app.command()
     def run(
@@ -157,31 +181,11 @@ def build_cli(
         data_root: str = typer.Option(data_root_default, "--data-root"),
     ) -> None:
         try:
-            artifact = _artifact_for(pipeline)
+            artifact = pipelines.get(pipeline).produces
         except PlumError as e:
             typer.echo(str(e), err=True)
             raise typer.Exit(1)
-        store = Store(catalog, data_root)
-        run_ids = list_runs(store, artifact, scope)
-        if not run_ids:
-            typer.echo("no runs")
-            return
-        rows = []
-        for run_id in run_ids:
-            m = run_manifest(store, artifact, run_id, scope=scope)
-            if m is None:
-                rows.append([run_id, "(no manifest)", "-", "-", "-"])
-            else:
-                rows.append(
-                    [
-                        run_id,
-                        m.status,
-                        _fmt_ts(m.started_at),
-                        _fmt_ts(m.finished_at),
-                        _fmt_duration(m.started_at, m.finished_at),
-                    ]
-                )
-        _print_table(["RUN ID", "STATUS", "STARTED", "FINISHED", "DURATION"], rows)
+        _echo_runs(Store(catalog, data_root), artifact, scope)
 
     @app.command()
     def show(
@@ -191,15 +195,11 @@ def build_cli(
         data_root: str = typer.Option(data_root_default, "--data-root"),
     ) -> None:
         try:
-            artifact = _artifact_for(pipeline)
+            artifact = pipelines.get(pipeline).produces
         except PlumError as e:
             typer.echo(str(e), err=True)
             raise typer.Exit(1)
-        m = run_manifest(Store(catalog, data_root), artifact, run_id, scope=scope)
-        if m is None:
-            typer.echo(f"no manifest for run '{run_id}'", err=True)
-            raise typer.Exit(1)
-        typer.echo(m.model_dump_json(indent=2))
+        _echo_manifest(Store(catalog, data_root), artifact, run_id, scope)
 
     @app.command()
     def push(
@@ -302,6 +302,33 @@ def _experiments_app(
             typer.echo(str(e), err=True)
             raise typer.Exit(1)
         typer.echo(f"experiment '{experiment}' invocation '{invocation_id}': {manifest.status}")
+
+    @sub.command("runs")
+    def experiments_runs(
+        experiment: str,
+        data_root: str = typer.Option(data_root_default, "--data-root"),
+    ) -> None:
+        try:
+            experiments.get(experiment)
+        except PlumError as e:
+            typer.echo(str(e), err=True)
+            raise typer.Exit(1)
+        _echo_runs(Store(catalog, data_root), EXPERIMENTS_ARTIFACT, experiment)
+
+    @sub.command("show")
+    def experiments_show(
+        experiment: str,
+        invocation_id: str,
+        data_root: str = typer.Option(data_root_default, "--data-root"),
+    ) -> None:
+        try:
+            experiments.get(experiment)
+        except PlumError as e:
+            typer.echo(str(e), err=True)
+            raise typer.Exit(1)
+        _echo_manifest(
+            Store(catalog, data_root), EXPERIMENTS_ARTIFACT, invocation_id, experiment
+        )
 
     return sub
 
