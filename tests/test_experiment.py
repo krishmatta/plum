@@ -225,25 +225,33 @@ def test_catalog_register_reserved_name_raises():
         Catalog().register(Artifact("experiments", JsonlCodec(BaseModel)))
 
 
-def test_cli_runs_lists_invocations(tmp_path):
+def test_cli_experiments_runs_lists_invocations(tmp_path):
     example_runner(tmp_path).invoke("method-sweep", "sweep1", n=3)
     result = runner.invoke(
-        app, ["runs", "experiments", "method-sweep", "--data-root", str(tmp_path)]
+        app, ["experiments", "runs", "method-sweep", "--data-root", str(tmp_path)]
     )
     assert result.exit_code == 0, result.output
     assert "sweep1" in result.output
     assert "ok" in result.output
 
 
-def test_cli_show_dumps_invocation_manifest(tmp_path):
+def test_cli_experiments_show_dumps_invocation_manifest(tmp_path):
     example_runner(tmp_path).invoke("method-sweep", "sweep1", n=3)
     result = runner.invoke(
         app,
-        ["show", "experiments", "sweep1", "method-sweep", "--data-root", str(tmp_path)],
+        ["experiments", "show", "method-sweep", "sweep1", "--data-root", str(tmp_path)],
     )
     assert result.exit_code == 0, result.output
     assert '"status": "ok"' in result.output
     assert '"n": 3' in result.output
+
+
+def test_cli_experiments_runs_unknown_lists_known(tmp_path):
+    result = runner.invoke(
+        app, ["experiments", "runs", "nope", "--data-root", str(tmp_path)]
+    )
+    assert result.exit_code == 1
+    assert "method-sweep" in result.output
 
 
 def test_cli_runs_unknown_pipeline_lists_known(tmp_path):
