@@ -11,8 +11,8 @@ from typer.testing import CliRunner
 
 from plum import (
     BACKENDS,
-    InputRef,
     PlumError,
+    RunRef,
     StaleLineage,
     Store,
     SyncConflict,
@@ -355,8 +355,8 @@ def test_lineage_pull_pin_disagreement_errors(tmp_path):
         uuid=uuid4().hex,
         status="ok",
         inputs=[
-            InputRef(artifact="numbers", run_id="base", uuid="u1"),
-            InputRef(artifact="numbers", run_id="base", uuid="u2"),
+            RunRef(artifact="numbers", run_id="base", uuid="u1"),
+            RunRef(artifact="numbers", run_id="base", uuid="u2"),
         ],
     )
     run_dir = remote / "powers" / "cube" / "p1"
@@ -375,7 +375,7 @@ def test_lineage_pull_unpinned_ref_satisfied_by_any_local(tmp_path):
         run_id="p1",
         uuid=uuid4().hex,
         status="ok",
-        inputs=[InputRef(artifact="numbers", run_id="base", uuid=None)],
+        inputs=[RunRef(artifact="numbers", run_id="base", uuid=None)],
     )
     run_dir = remote / "powers" / "cube" / "p1"
     run_dir.mkdir(parents=True)

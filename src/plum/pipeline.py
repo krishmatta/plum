@@ -54,8 +54,9 @@ def capture_git(cwd: Path) -> GitInfo | None:
     return GitInfo(sha=head.stdout.strip(), branch=branch or None)
 
 
-class InputRef(BaseModel):
-    """One upstream artifact a run read: an edge in the artifact graph.
+class RunRef(BaseModel):
+    """A stamped pointer to one run generation, used wherever a manifest
+    references another run (a run's inputs today).
 
     `uuid` pins the exact generation that was read. Run ids are mutable -- a
     force-regenerated run reuses the id but rewrites its content -- so the
@@ -87,7 +88,7 @@ class RunManifest(BaseModel):
     params: dict = {}
     stats: dict = {}
     git: GitInfo | None = None
-    inputs: list[InputRef] = []
+    inputs: list[RunRef] = []
     started_at: str = Field(default_factory=_timestamp)
     finished_at: str | None = None
     error: str | None = None
@@ -125,7 +126,7 @@ class RunContext:
         self.run_dir = run_dir
         self.store = store
         self.stats: dict = {}
-        self._inputs: list[InputRef] = []
+        self._inputs: list[RunRef] = []
         self._produces = produces
         self._scope = scope
 
@@ -139,7 +140,7 @@ class RunContext:
             self._inputs.append(ref)
         return obj
 
-    def _input_ref(self, artifact: str, run_id: str, scope: str | None) -> InputRef:
+    def _input_ref(self, artifact: str, run_id: str, scope: str | None) -> RunRef:
         upstream_uuid = produced_at = git_sha = None
         try:
             m = load_manifest(
@@ -150,7 +151,7 @@ class RunContext:
             git_sha = m.git.sha if m.git else None
         except Exception:
             pass  # upstream has no plum manifest (e.g. an externally-placed artifact)
-        return InputRef(
+        return RunRef(
             artifact=artifact,
             run_id=run_id,
             scope=scope,

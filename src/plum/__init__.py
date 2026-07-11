@@ -26,10 +26,10 @@ from plum.errors import (
 )
 from plum.pipeline import (
     GitInfo,
-    InputRef,
     Pipeline,
     RunContext,
     RunManifest,
+    RunRef,
     capture_git,
     load_manifest,
 )
@@ -46,7 +46,6 @@ __all__ = [
     "Experiment",
     "GitInfo",
     "DuplicateRegistration",
-    "InputRef",
     "Runner",
     "capture_git",
     "sweep",
@@ -62,6 +61,7 @@ __all__ = [
     "RowConverter",
     "RunContext",
     "RunManifest",
+    "RunRef",
     "S3Backend",
     "Shards",
     "Source",
