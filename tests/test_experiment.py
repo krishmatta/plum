@@ -214,6 +214,39 @@ def test_invoke_error_records_partial_inputs(tmp_path):
     assert [r.run_id for r in inv.inputs] == ["base"]  # ensured before the failure
 
 
+def test_frame_restores_after_nested_invocation(tmp_path):
+    experiments: Registry = Registry("experiment")
+
+    @experiments.register
+    class Child(Experiment):
+        id = "child"
+
+        def _run(self, runner, params):
+            runner.run("load", "child-base", n=3)
+
+    @experiments.register
+    class Parent(Experiment):
+        id = "parent"
+
+        def _run(self, runner, params):
+            runner.invoke("child", "c1")
+            runner.run("load", "parent-extra", n=5)  # after the child popped
+
+    r = Runner(PIPELINES, Store(CATALOG, tmp_path), experiments=experiments)
+    parent = r.invoke("parent", "p1")
+
+    # the child's frame recorded while nested; the parent's run stayed out of it
+    child = invocation_manifest(tmp_path, "child", "c1")
+    assert [(ref.artifact, ref.run_id) for ref in child.inputs] == [
+        ("numbers", "child-base")
+    ]
+    # after the pop, recording resumed into the parent
+    assert [(ref.artifact, ref.run_id) for ref in parent.inputs] == [
+        ("experiments", "c1"),
+        ("numbers", "parent-extra"),
+    ]
+
+
 def test_invoke_without_experiments_registry_raises(tmp_path):
     r = Runner(PIPELINES, Store(CATALOG, tmp_path))
     with pytest.raises(Exception):
