@@ -83,6 +83,7 @@ class RunManifest(BaseModel):
     pipeline: str
     run_id: str
     uuid: str
+    scope: str | None = None
     status: str = "running"  # running | ok | error
     description: str | None = None
     params: dict = {}
@@ -249,6 +250,8 @@ class Pipeline(abc.ABC):
         manifest = RunManifest(
             pipeline=self.name,
             run_id=run_id,
+            # so a RunRef can be stamped from this manifest alone
+            scope=scope,
             # every execution attempt (including a resume) is a new generation
             uuid=uuidlib.uuid4().hex,
             description=description if description is not None else carried_description,

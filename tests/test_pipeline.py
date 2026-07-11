@@ -291,8 +291,16 @@ class Scoped(Pipeline):
 def test_scope_groups_path(tmp_path):
     store = build_store(tmp_path)
     pipe = Scoped(store)
-    pipe.run("r1", group="g1")
+    manifest = pipe.run("r1", group="g1")
     assert (tmp_path / "thing" / "g1" / "r1" / "thing.json").exists()
+    assert manifest.scope == "g1"
+    assert load_manifest(tmp_path / "thing" / "g1" / "r1" / "manifest.json").scope == "g1"
+
+
+def test_unscoped_run_records_null_scope(tmp_path):
+    store = build_store(tmp_path)
+    manifest = Thing(store).run("r1")
+    assert manifest.scope is None
 
 
 def test_list_runs(tmp_path):
