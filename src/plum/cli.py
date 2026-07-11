@@ -14,6 +14,9 @@ from plum.errors import PlumError
 from plum.experiment import Runner
 from plum.pipeline import Pipeline
 from plum.registry import Registry
+from plum.sync import load_remote
+from plum.sync import pull as sync_pull
+from plum.sync import push as sync_push
 
 
 def _fmt_ts(iso: str | None) -> str:
@@ -190,6 +193,52 @@ def build_cli(
             typer.echo(f"no manifest for run '{run_id}'", err=True)
             raise typer.Exit(1)
         typer.echo(m.model_dump_json(indent=2))
+
+    @app.command()
+    def push(
+        remote: str = typer.Option("origin", "--remote"),
+        force: bool = typer.Option(False, "--force"),
+        data_root: str = typer.Option(data_root_default, "--data-root"),
+    ) -> None:
+        try:
+            result = sync_push(data_root, load_remote(remote), force=force)
+        except (PlumError, ValidationError, ValueError) as e:
+            typer.echo(str(e), err=True)
+            raise typer.Exit(1)
+        typer.echo(
+            f"pushed {len(result.transferred) + len(result.forced)}, "
+            f"skipped {len(result.skipped)}, forced {len(result.forced)}"
+        )
+
+    @app.command()
+    def pull(
+        artifact: Optional[str] = typer.Argument(None),
+        run_id: Optional[str] = typer.Argument(None),
+        scope: Optional[str] = typer.Option(None, "--scope"),
+        remote: str = typer.Option("origin", "--remote"),
+        force: bool = typer.Option(False, "--force"),
+        data_root: str = typer.Option(data_root_default, "--data-root"),
+    ) -> None:
+        try:
+            if artifact is not None and run_id is None:
+                raise ValueError("pull ARTIFACT requires a RUN_ID")
+            if artifact is None and (run_id is not None or scope is not None):
+                raise ValueError("RUN_ID and --scope require an ARTIFACT")
+            result = sync_pull(
+                data_root,
+                load_remote(remote),
+                artifact=artifact,
+                run_id=run_id,
+                scope=scope,
+                force=force,
+            )
+        except (PlumError, ValidationError, ValueError) as e:
+            typer.echo(str(e), err=True)
+            raise typer.Exit(1)
+        typer.echo(
+            f"pulled {len(result.transferred) + len(result.forced)}, "
+            f"skipped {len(result.skipped)}, forced {len(result.forced)}"
+        )
 
     for family, registry in (listings or {}).items():
         app.add_typer(_listing_app(registry), name=family)

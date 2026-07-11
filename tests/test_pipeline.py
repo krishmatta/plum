@@ -94,6 +94,7 @@ def test_resume_after_failure_with_different_params_raises(tmp_path):
             {
                 "pipeline": "thing",
                 "run_id": "r1",
+                "uuid": "u1",
                 "status": "error",
                 "params": {"value": 3},
             }
@@ -123,6 +124,7 @@ def test_interrupted_run_with_different_params_raises(tmp_path):
             {
                 "pipeline": "thing",
                 "run_id": "r1",
+                "uuid": "u1",
                 "status": "running",
                 "params": {"value": 5},
             }
@@ -143,6 +145,7 @@ def test_interrupted_run_resumes(tmp_path):
             {
                 "pipeline": "thing",
                 "run_id": "r1",
+                "uuid": "u1",
                 "status": "running",
                 "params": {"value": 5},
             }

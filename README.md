@@ -29,6 +29,7 @@ data/<artifact>/<scope>/<run_id>/
 | `Source` | A pluggable strategy in a registry. `autodiscover(pkg)` imports a package so registrations run. |
 | `Shards` | Checkpointed, resumable output within a run. |
 | `Experiment` | A committed script. Runs pipelines through a `Runner`; `sweep()` fans out params. |
+| `SyncBackend` | Transport for whole run dirs to a remote. `push`/`pull` drive the protocol; a backend only moves bytes. Builtin: `s3`. |
 
 ## Install
 
@@ -39,6 +40,7 @@ optional extras:
 $ pip install data-plum            # import as `plum`
 $ pip install data-plum[parquet]   # pyarrow
 $ pip install data-plum[torch]     # torch
+$ pip install data-plum[s3]        # boto3, for the s3 sync backend
 ```
 
 ## Start a new project
@@ -162,6 +164,10 @@ $ myproj pipelines params apply
 $ myproj methods list                              # one `list` per listing family
 $ myproj experiments list
 $ myproj experiments run method-sweep
+
+$ myproj push                                      # completed runs -> remote
+$ myproj pull                                      # remote ok runs -> local
+$ myproj pull powers p1 --scope cube               # that run and its input closure
 ```
 
 ## Runs
@@ -178,6 +184,64 @@ $ myproj experiments run method-sweep
 Params are part of run identity: rerunning or resuming a run id with different
 params raises `ParamsMismatch`. Every write is atomic, so a crashed run leaves no
 partial artifact.
+
+## Sync
+
+`push` and `pull` move whole run directories between the local `data_root` and a
+remote, keyed by each run dir's path relative to `data_root`. Remotes live in
+`plum.toml` in the project root:
+
+```toml
+[remotes.origin]
+backend = "s3"
+bucket = "my-bucket"
+prefix = "myproj"
+```
+
+Every key but `backend` is a field of that backend's `Options` and is validated
+on load. `--remote` selects the table (default `origin`).
+
+- **Completeness filtering.** Only runs whose manifest status is `ok` are
+  pushed. A crashed or mid-resume run never leaks to the remote, even with
+  `--force`.
+- **Conflict rule.** A run present on both sides is compared by its manifest's
+  generation uuid. Equal means already synced (skipped). Any
+  difference is a conflict: `push`/`pull` transfer nothing and raise
+  `SyncConflict`. Pass `--force` to overwrite the losing side (a forced run is
+  deleted first, so a regenerated run never mixes files across generations).
+  manifest.json is always pushed last, so its presence implies a complete run.
+  A crashed pull leaves nothing at the run path: pulled runs are staged and
+  appear atomically, manifest included.
+- **Lineage-closure pull.** `pull ARTIFACT RUN_ID [--scope S]` fetches that run
+  and the transitive closure of its recorded inputs. Closure members are
+  fetched at the exact generations the lineage recorded; if an upstream was
+  regenerated since, the pull errors (`StaleLineage`) instead of substituting.
+  A closure member is satisfied by a local copy of the consumed generation;
+  a divergent local copy is a conflict under the same all-or-nothing rule. A
+  member on neither side is an error.
+
+The `s3` backend ships in core (`pip install data-plum[s3]`). A backend is a
+transport only -- the sync protocol lives in `push`/`pull` -- so a custom one is
+small:
+
+```python
+@BACKENDS.register
+class FolderBackend(SyncBackend):
+    id = "folder"
+
+    class Options(SyncBackend.Options):  # rejects unknown plum.toml keys
+        path: str
+
+    def list_runs(self): ...            # relpaths of dirs with a manifest.json
+    def list_files(self, run): ...      # file relpaths within a run dir
+    def read_bytes(self, relpath): ...  # manifests only; files stream below
+    def upload(self, src, relpath): ...
+    def download(self, relpath, dest): ...
+    def delete_run(self, run): ...      # used only by force
+```
+
+`autodiscover` a `backends/` package to register it, exactly like methods. The
+full example is at `tests/example/backends/`.
 
 ## Design decisions
 

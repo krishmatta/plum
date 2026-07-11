@@ -1,6 +1,6 @@
 [project]
 name = "data-plum"
-version = "0.1.1"
+version = "0.2.0"
 description = "A data plumbing library for research pipelines"
 readme = "README.md"
 authors = [
@@ -12,11 +12,13 @@ license-files = ["LICENSE"]
 dependencies = [
     "click>=8.4.2",
     "pydantic>=2",
+    "tomli>=2; python_version < '3.11'",
     "typer>=0.19",
 ]
 
 [project.optional-dependencies]
 parquet = ["pyarrow>=17"]
+s3 = ["boto3>=1.34"]
 torch = ["torch>=2"]
 
 [project.scripts]

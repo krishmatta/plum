@@ -39,6 +39,8 @@ def make_repo(root):
     git(root, "init")
     git(root, "config", "user.email", "t@example.com")
     git(root, "config", "user.name", "t")
+    # hermetic against a host global config that signs commits
+    git(root, "config", "commit.gpgsign", "false")
     (root / ".gitignore").write_text("/data/\n")
     (root / "code.py").write_text("x = 1\n")
     git(root, "add", "-A")

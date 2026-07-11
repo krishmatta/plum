@@ -63,6 +63,45 @@ class PriorRunFailed(PlumError):
         )
 
 
+class StaleLineage(PlumError):
+    def __init__(
+        self,
+        relpath: str,
+        *,
+        expected: str | None = None,
+        found: str | None = None,
+        conflicting: tuple[str, str] | None = None,
+    ) -> None:
+        self.relpath = relpath
+        self.expected = expected
+        self.found = found
+        self.conflicting = conflicting
+        if conflicting is not None:
+            first, second = conflicting
+            message = (
+                f"lineage is internally inconsistent: run '{relpath}' is pinned to "
+                f"two different generations ({first} vs {second}); a path-addressed "
+                "store cannot hold both"
+            )
+        else:
+            message = (
+                f"run '{relpath}' no longer holds the generation this lineage "
+                f"consumed (expected uuid {expected}, found {found or '(absent)'}); "
+                "the upstream was regenerated after being consumed"
+            )
+        super().__init__(message)
+
+
+class SyncConflict(PlumError):
+    def __init__(self, direction: str, runs: list[str]) -> None:
+        self.direction = direction
+        self.runs = sorted(runs)
+        super().__init__(
+            f"{direction} blocked: {len(self.runs)} run(s) differ between local and "
+            f"remote (" + "; ".join(self.runs) + "); pass --force to overwrite"
+        )
+
+
 class DirtyWorkingTree(PlumError):
     def __init__(self, repo: str, reason: str) -> None:
         self.repo = repo
