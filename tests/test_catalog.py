@@ -48,4 +48,4 @@ def test_unknown_artifact_raises(tmp_path):
     store = Store(catalog, tmp_path)
     with pytest.raises(UnknownArtifact) as exc:
         store.path("missing", "r1")
-    assert exc.value.known == ["a", "b"]
+    assert exc.value.known == ["a", "b", "experiments"]  # reserved, present from birth

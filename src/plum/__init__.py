@@ -12,26 +12,29 @@ from plum.codecs import (
     write_atomic,
 )
 from plum.config import Params, parse_kw
-from plum.experiment import Experiment, Runner, sweep
+from plum.experiment import Experiment, InvocationRecord, Runner, sweep
 from plum.errors import (
     DirtyWorkingTree,
     DuplicateRegistration,
     ParamsMismatch,
     PlumError,
     PriorRunFailed,
+    ReservedName,
     StaleLineage,
     SyncConflict,
     UnknownArtifact,
     UnknownName,
 )
-from plum.pipeline import (
+from plum.pipeline import Pipeline, RunContext
+from plum.run import (
     GitInfo,
-    InputRef,
-    Pipeline,
-    RunContext,
     RunManifest,
+    RunRef,
+    Runnable,
     capture_git,
+    list_runs,
     load_manifest,
+    run_manifest,
 )
 from plum.registry import Registry
 from plum.sources import Source, autodiscover
@@ -46,7 +49,8 @@ __all__ = [
     "Experiment",
     "GitInfo",
     "DuplicateRegistration",
-    "InputRef",
+    "InvocationRecord",
+    "ReservedName",
     "Runner",
     "capture_git",
     "sweep",
@@ -60,8 +64,10 @@ __all__ = [
     "PriorRunFailed",
     "Registry",
     "RowConverter",
+    "Runnable",
     "RunContext",
     "RunManifest",
+    "RunRef",
     "S3Backend",
     "Shards",
     "Source",
@@ -75,10 +81,12 @@ __all__ = [
     "autodiscover",
     "build_cli",
     "infer_arrow_schema",
+    "list_runs",
     "load_manifest",
     "load_remote",
     "parse_kw",
     "pull",
     "push",
+    "run_manifest",
     "write_atomic",
 ]

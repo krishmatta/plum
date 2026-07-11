@@ -26,11 +26,18 @@ class UnknownArtifact(UnknownName):
         super().__init__("artifact", name, known)
 
 
+class ReservedName(PlumError):
+    def __init__(self, kind: str, name: str) -> None:
+        self.kind = kind
+        self.name = name
+        super().__init__(f"{kind} '{name}' is reserved by plum")
+
+
 class ParamsMismatch(PlumError):
     def __init__(
-        self, pipeline: str, run_id: str, stored: dict, requested: dict
+        self, name: str, run_id: str, stored: dict, requested: dict
     ) -> None:
-        self.pipeline = pipeline
+        self.name = name
         self.run_id = run_id
         self.stored = stored
         self.requested = requested
@@ -45,20 +52,20 @@ class ParamsMismatch(PlumError):
             if stored.get(k, missing) != requested.get(k, missing)
         ]
         super().__init__(
-            f"{pipeline} run '{run_id}' was computed with different params ("
+            f"{name} run '{run_id}' was computed with different params ("
             + "; ".join(diffs)
             + "); pass force=True to start over"
         )
 
 
 class PriorRunFailed(PlumError):
-    def __init__(self, pipeline: str, run_id: str, error: str | None) -> None:
-        self.pipeline = pipeline
+    def __init__(self, name: str, run_id: str, error: str | None) -> None:
+        self.name = name
         self.run_id = run_id
         self.error = error
         cause = f": {error.strip().splitlines()[-1]}" if error else ""
         super().__init__(
-            f"{pipeline} run '{run_id}' previously failed{cause}; "
+            f"{name} run '{run_id}' previously failed{cause}; "
             "pass resume=True to continue from checkpoints or force=True to start over"
         )
 

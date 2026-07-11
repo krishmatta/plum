@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Iterator
 
-from plum.pipeline import MANIFEST_FILE
+from plum.run import MANIFEST_FILE
 from plum.sync._backend import BACKENDS, SyncBackend
 
 

@@ -110,7 +110,7 @@ def test_show_scoped_run(tmp_path):
     run("run", "apply", "p1", "numbers_run=nums", "method=cube", data_root=tmp_path)
     result = run("show", "apply", "p1", "cube", data_root=tmp_path)
     assert result.exit_code == 0
-    assert RunManifest.model_validate_json(result.output).pipeline == "apply"
+    assert RunManifest.model_validate_json(result.output).name == "apply"
 
 
 def test_show_unknown_run_exits_nonzero(tmp_path):

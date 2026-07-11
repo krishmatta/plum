@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Iterator
 
 from plum.errors import PlumError, StaleLineage, SyncConflict
-from plum.pipeline import MANIFEST_FILE, RunManifest, load_manifest
+from plum.run import MANIFEST_FILE, RunManifest, load_manifest
 from plum.sync._backend import SyncBackend
 
 
@@ -175,7 +175,7 @@ def _closure(
     backend: SyncBackend, data_root: Path, artifact: str, run_id: str, scope: str | None
 ) -> dict[str, RunManifest]:
     """The transitive input-closure of one run, each member pinned to the
-    generation the consuming manifest's InputRef recorded. The root is unpinned
+    generation the consuming manifest's RunRef recorded. The root is unpinned
     (taken at the remote's current generation); its refs pin everything below.
 
     A pinned member is satisfied only by a local copy of that exact generation;
