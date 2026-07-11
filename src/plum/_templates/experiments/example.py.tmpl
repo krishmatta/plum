@@ -9,7 +9,13 @@ from ..registries import EXPERIMENTS
 class Demo(Experiment):
     id = "demo"
 
-    def run(self, runner):
+    class Params(Experiment.Params):
+        base: int = 3
+
+    def _run(self, runner, params):
         # a sweep: one run per param combo, with a run id derived from the params
-        for params, run_id in sweep({"n": [3, 5]}, run_id=lambda p: f"demo-{p['n']}"):
-            runner.run("load", run_id, n=params["n"], description=f"demo n={params['n']}")
+        for combo, run_id in sweep(
+            {"n": [params.base, params.base + 2]},
+            run_id=lambda p: f"demo-{p['n']}",
+        ):
+            runner.run("load", run_id, n=combo["n"], description=f"demo n={combo['n']}")

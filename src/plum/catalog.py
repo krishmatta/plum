@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Any
 
 from plum.codecs import Codec
-from plum.errors import UnknownArtifact, UnknownName
+from plum.errors import ReservedName, UnknownArtifact, UnknownName
 from plum.registry import Registry
 
 
@@ -20,9 +20,23 @@ class Artifact:
         return self.filename or f"{self.name}{self.codec.extension}"
 
 
+# artifacts plum registers on its own behalf: the owning module appends at
+# import (e.g. the invocation artifact in experiment.py), every Catalog
+# carries them from birth, and Catalog.register rejects their names.
+RESERVED_ARTIFACTS: list[Artifact] = []
+
+
 class Catalog(Registry[Artifact]):
     def __init__(self) -> None:
         super().__init__("artifact", key="name")
+        for artifact in RESERVED_ARTIFACTS:
+            self._add(artifact, None)
+
+    def register(self, obj=None, *, name: str | None = None):
+        resolved = name if name is not None else getattr(obj, "name", None)
+        if any(resolved == a.name for a in RESERVED_ARTIFACTS):
+            raise ReservedName("artifact", resolved)
+        return super().register(obj, name=name)
 
     def get(self, name: str) -> Artifact:
         try:

@@ -28,7 +28,7 @@ data/<artifact>/<scope>/<run_id>/
 | `Registry` | Name to object lookup. Unknown names error with the known names listed. |
 | `Source` | A pluggable strategy in a registry. `autodiscover(pkg)` imports a package so registrations run. |
 | `Shards` | Checkpointed, resumable output within a run. |
-| `Experiment` | A committed script. Runs pipelines through a `Runner`; `sweep()` fans out params. |
+| `Experiment` | A committed, parameterized script. Runs pipelines through a `Runner`; `sweep()` fans out params. `runner.invoke` records each run as an invocation under `data/experiments/`. |
 | `SyncBackend` | Transport for whole run dirs to a remote. `push`/`pull` drive the protocol; a backend only moves bytes. Builtin: `s3`. |
 
 ## Install
@@ -53,7 +53,7 @@ $ cd myproj
 $ uv add data-plum
 $ uv run plum init
 $ git add -A && git commit -m scaffold
-$ uv run myproj experiments run demo
+$ uv run myproj experiments run demo inv1
 ```
 
 `plum init` writes `catalog.py`, `registries.py`, `schema.py`, a `pipelines/`
@@ -126,17 +126,21 @@ class Apply(Pipeline):
 ```
 
 ```python
-# experiments/method_sweep.py — a sweep over a shared upstream
+# experiments/method_sweep.py — a parameterized sweep over a shared upstream
 @EXPERIMENTS.register
 class MethodSweep(Experiment):
     id = "method-sweep"
 
-    def run(self, runner):
-        runner.run("load", "base", n=6, description="shared numbers")   # computed once
-        for params, run_id in sweep({"method": ["square", "cube"]},
-                                    run_id=lambda p: f"pow-{p['method']}"):
-            runner.run("apply", run_id, numbers_run="base", method=params["method"],
-                       description=f"powers via {params['method']}")
+    class Params(Experiment.Params):
+        n: int = 6
+
+    def _run(self, runner, params):
+        base = f"base-n{params.n}"                                       # ids derive from params
+        runner.run("load", base, n=params.n, description="shared numbers")   # computed once
+        for combo, run_id in sweep({"method": ["square", "cube"]},
+                                   run_id=lambda p: f"pow-{p['method']}-n{params.n}"):
+            runner.run("apply", run_id, numbers_run=base, method=combo["method"],
+                       description=f"powers via {combo['method']}")
 ```
 
 ```python
@@ -163,11 +167,13 @@ $ myproj pipelines list
 $ myproj pipelines params apply
 $ myproj methods list                              # one `list` per listing family
 $ myproj experiments list
-$ myproj experiments run method-sweep
+$ myproj experiments run method-sweep sweep1 n=6   # invocation id + key=value params
+$ myproj runs experiments method-sweep             # invocations, via the same runs/show
 
 $ myproj push                                      # completed runs -> remote
 $ myproj pull                                      # remote ok runs -> local
 $ myproj pull powers p1 --scope cube               # that run and its input closure
+$ myproj pull experiments sweep1 --scope method-sweep  # everything the invocation ensured
 ```
 
 ## Runs
@@ -271,6 +277,27 @@ Experiments are committed Python, not config. An experiment runs pipelines by
 name with explicit run ids. `sweep()` expands a param grid into runs with derived
 ids. Reuse is explicit: run a shared upstream once and pass its id. There is no
 automatic dependency resolution.
+
+An experiment declares a `Params` (like a pipeline) and implements
+`_run(self, runner, params)` to drive pipelines through `runner` -- symmetric
+with a pipeline's `_run(ctx)`. Run ids inside a parameterized experiment must derive from its params
+(`f"base-n{params.n}"`): a fixed id would raise `ParamsMismatch` the moment two
+invocations differ.
+
+### Invocations are runs
+`runner.invoke("method-sweep", "sweep1", n=6)` records the invocation as a run
+at `data/experiments/<experiment-id>/<invocation-id>/`.
+The manifest carries the params, git commit, timing, and status, and its `inputs`
+list every run the invocation ensured — including runs that already existed and
+no-op'd. An `ok` invocation skips on re-invoke; different params raise
+`ParamsMismatch`; the invocation syncs like any other run. `invoke` is the
+composition API: calling it inside another experiment records the child
+invocation as an input of the parent, so nested invocations nest their lineage.
+
+Because an invocation is a run whose inputs are what it ensured,
+`myproj pull experiments sweep1 --scope method-sweep` pulls the invocation and,
+through the normal lineage closure, every artifact it produced transitively — no
+sync code specific to experiments.
 
 ### Run descriptions
 At a terminal, `run` opens `$EDITOR` for a description and aborts on an empty

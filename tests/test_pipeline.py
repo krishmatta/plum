@@ -13,6 +13,7 @@ from plum import (
     PriorRunFailed,
     Store,
     UnknownArtifact,
+    list_runs,
     load_manifest,
 )
 
@@ -92,7 +93,7 @@ def test_resume_after_failure_with_different_params_raises(tmp_path):
     (run_dir / "manifest.json").write_text(
         json.dumps(
             {
-                "pipeline": "thing",
+                "name": "thing",
                 "run_id": "r1",
                 "uuid": "u1",
                 "status": "error",
@@ -122,7 +123,7 @@ def test_interrupted_run_with_different_params_raises(tmp_path):
     (run_dir / "manifest.json").write_text(
         json.dumps(
             {
-                "pipeline": "thing",
+                "name": "thing",
                 "run_id": "r1",
                 "uuid": "u1",
                 "status": "running",
@@ -143,7 +144,7 @@ def test_interrupted_run_resumes(tmp_path):
     (run_dir / "manifest.json").write_text(
         json.dumps(
             {
-                "pipeline": "thing",
+                "name": "thing",
                 "run_id": "r1",
                 "uuid": "u1",
                 "status": "running",
@@ -306,10 +307,10 @@ def test_unscoped_run_records_null_scope(tmp_path):
 def test_list_runs(tmp_path):
     store = build_store(tmp_path)
     pipe = Thing(store)
-    assert pipe.list_runs(None) == []
+    assert list_runs(store, "thing") == []
     pipe.run("r1")
     pipe.run("r2")
-    assert pipe.list_runs(None) == ["r1", "r2"]
+    assert list_runs(store, "thing") == ["r1", "r2"]
 
 
 class Undeclared(Pipeline):

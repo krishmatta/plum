@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Iterator
 
 from plum.errors import PlumError, StaleLineage, SyncConflict
-from plum.pipeline import MANIFEST_FILE, RunManifest, load_manifest
+from plum.run import MANIFEST_FILE, RunManifest, load_manifest
 from plum.sync._backend import SyncBackend
 
 

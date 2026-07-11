@@ -4,7 +4,7 @@ import shutil
 from pathlib import Path
 
 from plum import BACKENDS, SyncBackend, write_atomic
-from plum.pipeline import MANIFEST_FILE
+from plum.run import MANIFEST_FILE
 
 
 @BACKENDS.register

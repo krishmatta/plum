@@ -13,6 +13,7 @@ from plum import (
     BACKENDS,
     PlumError,
     RunRef,
+    Runner,
     StaleLineage,
     Store,
     SyncConflict,
@@ -22,12 +23,12 @@ from plum import (
     pull,
     push,
 )
-from plum.pipeline import MANIFEST_FILE, RunManifest
+from plum.run import MANIFEST_FILE, RunManifest
 
 from tests.example.app import app
 from tests.example.backends.folder import FolderBackend
 from tests.example.catalog import CATALOG
-from tests.example.registries import PIPELINES
+from tests.example.registries import EXPERIMENTS, PIPELINES
 from tests.example.schema import Numbers, Power
 
 runner = CliRunner()
@@ -48,7 +49,7 @@ def folder(root: Path) -> FolderBackend:
 def write_manifest(run_dir: Path, **fields) -> None:
     run_dir.mkdir(parents=True, exist_ok=True)
     fields.setdefault("uuid", uuid4().hex)
-    m = RunManifest(pipeline="load", run_id=run_dir.name, **fields)
+    m = RunManifest(name="load", run_id=run_dir.name, **fields)
     (run_dir / MANIFEST_FILE).write_text(m.model_dump_json())
 
 
@@ -350,7 +351,7 @@ def test_lineage_pull_pinned_local_beats_regenerated_remote(tmp_path):
 def test_lineage_pull_pin_disagreement_errors(tmp_path):
     remote, dest = tmp_path / "remote", tmp_path / "dest"
     root = RunManifest(
-        pipeline="apply",
+        name="apply",
         run_id="p1",
         uuid=uuid4().hex,
         status="ok",
@@ -371,7 +372,7 @@ def test_lineage_pull_pin_disagreement_errors(tmp_path):
 def test_lineage_pull_unpinned_ref_satisfied_by_any_local(tmp_path):
     remote, dest = tmp_path / "remote", tmp_path / "dest"
     root = RunManifest(
-        pipeline="apply",
+        name="apply",
         run_id="p1",
         uuid=uuid4().hex,
         status="ok",
@@ -434,6 +435,33 @@ def test_lineage_closure_force_replaces_divergent_and_pulls_rest(tmp_path):
     local_m = load_manifest(dest / "numbers" / "base" / MANIFEST_FILE)
     assert local_m.finished_at == remote_m.finished_at
     assert store(dest).read("powers", "p1", scope="cube") == [
+        Power(x=x, y=x**3) for x in range(6)
+    ]
+
+
+def test_lineage_pull_invocation_fetches_everything_it_ensured(tmp_path):
+    # the payoff: an invocation is a run, so pulling its closure fetches every
+    # run it ensured with zero sync-specific code
+    src, remote, dest = tmp_path / "src", tmp_path / "remote", tmp_path / "dest"
+    Runner(PIPELINES, store(src), experiments=EXPERIMENTS).invoke(
+        "method-sweep", "sweep1", n=6
+    )
+    push(src, folder(remote))
+
+    result = pull(
+        dest,
+        folder(remote),
+        artifact="experiments",
+        run_id="sweep1",
+        scope="method-sweep",
+    )
+    assert "experiments/method-sweep/sweep1" in result.transferred
+    assert "numbers/base-n6" in result.transferred
+    assert "powers/cube/pow-cube-n6" in result.transferred
+    assert "powers/square/pow-square-n6" in result.transferred
+    # the ensured artifacts are usable locally
+    assert store(dest).read("numbers", "base-n6") == Numbers(values=list(range(6)))
+    assert store(dest).read("powers", "pow-cube-n6", scope="cube") == [
         Power(x=x, y=x**3) for x in range(6)
     ]
 

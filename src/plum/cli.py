@@ -11,8 +11,9 @@ from pydantic import ValidationError
 from plum.catalog import Catalog, Store
 from plum.config import parse_kw
 from plum.errors import PlumError
-from plum.experiment import Runner
+from plum.experiment import EXPERIMENTS_ARTIFACT, Runner
 from plum.pipeline import Pipeline
+from plum.run import list_runs, run_manifest
 from plum.registry import Registry
 from plum.sync import load_remote
 from plum.sync import pull as sync_pull
@@ -89,6 +90,13 @@ def build_cli(
     list/params, runs, and a `list` subcommand per listing family."""
     app = typer.Typer(no_args_is_help=True, pretty_exceptions_show_locals=False)
 
+    def _artifact_for(name: str) -> str:
+        """What `runs`/`show` inspect: a pipeline's artifact, or the reserved
+        invocations artifact (whose "scope" argument is then the experiment id)."""
+        if name == EXPERIMENTS_ARTIFACT:
+            return EXPERIMENTS_ARTIFACT
+        return pipelines.get(name).produces
+
     @app.command()
     def run(
         pipeline: str,
@@ -110,7 +118,7 @@ def build_cli(
             # Only ask for a description when creating a new (or forced) run, so
             # cached reruns don't re-prompt.
             description = None
-            if force or pipe.manifest(run_id, scope=scope) is None:
+            if force or run_manifest(store, pipe.produces, run_id, scope=scope) is None:
                 description = _gather_description(pipeline, run_id, kw, message)
             manifest = pipe.run(
                 run_id, force=force, resume=resume, description=description, **kw
@@ -149,18 +157,18 @@ def build_cli(
         data_root: str = typer.Option(data_root_default, "--data-root"),
     ) -> None:
         try:
-            pipeline_cls = pipelines.get(pipeline)
+            artifact = _artifact_for(pipeline)
         except PlumError as e:
             typer.echo(str(e), err=True)
             raise typer.Exit(1)
-        pipe = pipeline_cls(Store(catalog, data_root))
-        run_ids = pipe.list_runs(scope)
+        store = Store(catalog, data_root)
+        run_ids = list_runs(store, artifact, scope)
         if not run_ids:
             typer.echo("no runs")
             return
         rows = []
         for run_id in run_ids:
-            m = pipe.manifest(run_id, scope=scope)
+            m = run_manifest(store, artifact, run_id, scope=scope)
             if m is None:
                 rows.append([run_id, "(no manifest)", "-", "-", "-"])
             else:
@@ -183,12 +191,11 @@ def build_cli(
         data_root: str = typer.Option(data_root_default, "--data-root"),
     ) -> None:
         try:
-            pipeline_cls = pipelines.get(pipeline)
+            artifact = _artifact_for(pipeline)
         except PlumError as e:
             typer.echo(str(e), err=True)
             raise typer.Exit(1)
-        pipe = pipeline_cls(Store(catalog, data_root))
-        m = pipe.manifest(run_id, scope=scope)
+        m = run_manifest(Store(catalog, data_root), artifact, run_id, scope=scope)
         if m is None:
             typer.echo(f"no manifest for run '{run_id}'", err=True)
             raise typer.Exit(1)
@@ -265,16 +272,36 @@ def _experiments_app(
     @sub.command("run")
     def experiments_run(
         experiment: str,
+        invocation_id: str,
+        param: list[str] = typer.Argument(None, help="Params as key=value (values may be JSON)"),
+        message: Optional[str] = typer.Option(
+            None, "-m", "--message", help="Run description; opens $EDITOR if omitted at a terminal"
+        ),
+        force: bool = typer.Option(False, "--force"),
+        resume: bool = typer.Option(False, "--resume"),
         data_root: str = typer.Option(data_root_default, "--data-root"),
     ) -> None:
         try:
-            experiment_cls = experiments.get(experiment)
-            runner = Runner(pipelines, Store(catalog, data_root))
-            experiment_cls().run(runner)
+            store = Store(catalog, data_root)
+            runner = Runner(pipelines, store, experiments=experiments)
+            kw = parse_kw(param)
+            description = None
+            if force or run_manifest(
+                store, EXPERIMENTS_ARTIFACT, invocation_id, scope=experiment
+            ) is None:
+                description = _gather_description(experiment, invocation_id, kw, message)
+            manifest = runner.invoke(
+                experiment,
+                invocation_id,
+                description=description,
+                force=force,
+                resume=resume,
+                **kw,
+            )
         except (PlumError, ValidationError, ValueError) as e:
             typer.echo(str(e), err=True)
             raise typer.Exit(1)
-        typer.echo(f"experiment '{experiment}': done")
+        typer.echo(f"experiment '{experiment}' invocation '{invocation_id}': {manifest.status}")
 
     return sub
 
